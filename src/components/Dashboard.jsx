@@ -185,7 +185,7 @@ function formatRelativeDate(date) {
   return date.toLocaleDateString('fr-CA');
 }
 
-export default function Dashboard({ account, onDisconnect, onOpenConfig }) {
+export default function Dashboard({ account, onDisconnect, onOpenConfig, onOpenDecisions }) {
   const { emails, loading, error: syncError, refresh } = useEmails(account);
   const { analyses, analyzing, error: analyzeError, stats, analyze } = useAnalyses(account);
   const [expandedId, setExpandedId] = useState(null);
@@ -229,6 +229,17 @@ export default function Dashboard({ account, onDisconnect, onOpenConfig }) {
             >
               {loading ? '...' : 'Actualiser'}
             </button>
+            {onOpenDecisions && (
+              <button
+                onClick={onOpenDecisions}
+                className="rounded-lg border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-50"
+                title="Suivi des décisions"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+              </button>
+            )}
             {onOpenConfig && (
               <button
                 onClick={onOpenConfig}

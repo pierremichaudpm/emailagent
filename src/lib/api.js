@@ -34,3 +34,14 @@ export function analyzeEmails(email, provider = 'gmail', opts = {}) {
   const params = new URLSearchParams({ email, provider, ...opts });
   return request(`/emails-analyze?${params}`);
 }
+
+export function listDecisions(email, status) {
+  const params = new URLSearchParams({ email });
+  if (status) params.set('status', status);
+  return request(`/decisions-list?${params}`);
+}
+
+export function checkDecisions(email, provider = 'gmail') {
+  const params = new URLSearchParams({ email, provider });
+  return request(`/decisions-check?${params}`);
+}

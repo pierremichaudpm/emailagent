@@ -188,5 +188,46 @@
 ### Prochaines étapes
 
 1. **Provisionner les services** pour test end-to-end
-2. **Phase 5 — Suivi de décisions**
+2. ~~**Phase 5 — Suivi de décisions**~~ → **Fait** (Session 3)
 3. **Phase 6 — Polish + tests**
+
+---
+
+## 2026-03-10 — Session 3 (suite) : Phase 5 — Suivi de décisions
+
+### Accompli
+
+**Phase 5 — Suivi de décisions (complet)**
+
+1. `decisions-list.js` — Netlify Function :
+   - Liste les décisions par utilisateur, filtre par status optionnel
+   - Calcule `days_waiting` dynamiquement pour les décisions en attente
+
+2. `decisions-check.js` — Netlify Function :
+   - Récupère les décisions en attente
+   - Pour chaque décision, appelle `provider.checkReplyExists()` via Gmail API
+   - Si réponse trouvée : marque comme `resolved` avec `resolved_at`
+   - Sinon : met à jour `days_waiting` et `last_checked`
+   - Retourne le nombre vérifié, résolu, et encore en attente
+
+3. `useDecisions.js` — hook frontend :
+   - `refresh()` : charger la liste des décisions
+   - `check()` : vérifier les réponses + recharger la liste
+   - Expose `pending`, `resolved`, `loading`, `checking`
+
+4. `DecisionTracker.jsx` — composant plein écran :
+   - Header avec compteurs (en attente / résolues)
+   - Bouton « Vérifier » pour lancer la vérification des réponses
+   - Section « En attente » avec badges amber, indicateur jours, deadline
+   - Section « Résolues » avec badges verts
+   - Message vide si aucune décision
+
+5. Intégration :
+   - `App.jsx` : navigation par state `view` (dashboard/config/decisions)
+   - `Dashboard.jsx` : bouton clipboard dans le header pour accéder au tracker
+   - `api.js` : wrappers `listDecisions()` et `checkDecisions()`
+
+### Prochaines étapes
+
+1. **Provisionner les services** pour test end-to-end
+2. **Phase 6 — Polish + tests**

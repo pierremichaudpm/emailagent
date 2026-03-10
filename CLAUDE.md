@@ -26,6 +26,8 @@ email-agent/
 │   ├── config-get.js          # GET — lire user_configs
 │   ├── config-update.js       # POST — upsert user_configs
 │   ├── emails-analyze.js      # GET — batch analyse IA → résumés + priorités
+│   ├── decisions-list.js      # GET — lister décisions (en attente / résolues)
+│   ├── decisions-check.js     # GET — vérifier réponses et résoudre décisions
 │   ├── providers/
 │   │   ├── base.js            # Interface abstraite EmailProvider
 │   │   ├── gmail.js           # Implémentation Gmail API
@@ -36,7 +38,7 @@ email-agent/
 │       ├── supabase.js        # Client singleton (service role)
 │       └── tokens.js          # AES-256-GCM encrypt/decrypt
 ├── src/
-│   ├── App.jsx                # Flow: login → onboarding → dashboard
+│   ├── App.jsx                # Flow: login → onboarding → dashboard/config/decisions
 │   ├── main.jsx               # Entry point + BrowserRouter
 │   ├── index.css              # @import "tailwindcss"
 │   ├── components/
@@ -44,11 +46,13 @@ email-agent/
 │   │   ├── ConfigPanel.jsx    # Édition config post-onboarding (onglets)
 │   │   ├── ConfigSteps.jsx    # Composants formulaire partagés (Onboarding + ConfigPanel)
 │   │   ├── Dashboard.jsx      # Dashboard enrichi (compteurs, priorités, résumés IA)
+│   │   ├── DecisionTracker.jsx # Suivi des décisions en attente / résolues
 │   │   └── Onboarding.jsx     # Wizard 4 étapes config initiale
 │   ├── hooks/
 │   │   ├── useAccount.js      # État auth (localStorage)
 │   │   ├── useAnalyses.js     # Fetch analyses IA + état
 │   │   ├── useConfig.js       # Charger/sauvegarder user_configs
+│   │   ├── useDecisions.js    # Fetch décisions + vérification réponses
 │   │   └── useEmails.js       # Fetch emails + loading/error
 │   └── lib/
 │       └── api.js             # Fetch wrappers → Netlify Functions
@@ -120,5 +124,5 @@ TOKEN_ENCRYPTION_KEY=    # 64 hex chars: node -e "console.log(require('crypto').
 | 2 | ConfigPanel (modifier config post-onboarding) | **Fait** |
 | 3 | Analyse IA (emails-analyze, claude.js, prioritize.js) | **Fait** |
 | 4 | Dashboard enrichi (priorités, résumés, compteurs) | **Fait** |
-| 5 | Suivi de décisions (scheduled function, tracker) | À faire |
+| 5 | Suivi de décisions (scheduled function, tracker) | **Fait** |
 | 6 | Polish + tests internes JAXA | À faire |

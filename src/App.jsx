@@ -5,11 +5,12 @@ import AuthButton from './components/AuthButton';
 import Dashboard from './components/Dashboard';
 import Onboarding from './components/Onboarding';
 import ConfigPanel from './components/ConfigPanel';
+import DecisionTracker from './components/DecisionTracker';
 
 export default function App() {
   const { account, disconnect } = useAccount();
   const { config, configLoading, saveConfig } = useConfig(account);
-  const [showConfig, setShowConfig] = useState(false);
+  const [view, setView] = useState('dashboard'); // 'dashboard' | 'config' | 'decisions'
 
   if (!account) {
     return (
@@ -40,12 +41,21 @@ export default function App() {
     return <Onboarding account={account} onComplete={saveConfig} />;
   }
 
-  if (showConfig) {
+  if (view === 'config') {
     return (
       <ConfigPanel
         config={config}
         onSave={saveConfig}
-        onClose={() => setShowConfig(false)}
+        onClose={() => setView('dashboard')}
+      />
+    );
+  }
+
+  if (view === 'decisions') {
+    return (
+      <DecisionTracker
+        account={account}
+        onBack={() => setView('dashboard')}
       />
     );
   }
@@ -55,7 +65,8 @@ export default function App() {
       <Dashboard
         account={account}
         onDisconnect={disconnect}
-        onOpenConfig={() => setShowConfig(true)}
+        onOpenConfig={() => setView('config')}
+        onOpenDecisions={() => setView('decisions')}
       />
     </div>
   );

@@ -132,7 +132,7 @@
 
 ---
 
-## 2026-03-10 — Session 3 : Phase 4 — Dashboard enrichi
+## 2026-03-10 — Session 3 : Phases 4, 2 et 5
 
 ### Accompli
 
@@ -150,19 +150,6 @@
    - **Icône décision requise** : point violet sur les emails nécessitant une action
    - **Onglets** : "Analysés" (triés par priorité) / "Tous" (vue brute originale)
    - **Fallback** : si aucune analyse, affiche la vue brute + message invitant à analyser
-   - Build Vite OK (247 KB gzippé ~78 KB)
-
-### Prochaines étapes
-
-1. ~~**Phase 2 — ConfigPanel**~~ → **Fait** (Session 3)
-2. **Provisionner les services** pour test end-to-end
-3. **Phase 5 — Suivi de décisions**
-
----
-
-## 2026-03-10 — Session 3 (suite) : Phase 2 — ConfigPanel
-
-### Accompli
 
 **Phase 2 — ConfigPanel (complet)**
 
@@ -183,19 +170,6 @@
 4. Intégration :
    - `App.jsx` : state `showConfig` pour basculer Dashboard ↔ ConfigPanel
    - `Dashboard.jsx` : bouton engrenage dans le header pour ouvrir la config
-   - Build Vite OK (253 KB → ~80 KB gzippé)
-
-### Prochaines étapes
-
-1. **Provisionner les services** pour test end-to-end
-2. ~~**Phase 5 — Suivi de décisions**~~ → **Fait** (Session 3)
-3. **Phase 6 — Polish + tests**
-
----
-
-## 2026-03-10 — Session 3 (suite) : Phase 5 — Suivi de décisions
-
-### Accompli
 
 **Phase 5 — Suivi de décisions (complet)**
 
@@ -227,7 +201,42 @@
    - `Dashboard.jsx` : bouton clipboard dans le header pour accéder au tracker
    - `api.js` : wrappers `listDecisions()` et `checkDecisions()`
 
+### Décisions techniques (Session 3)
+
+| Décision | Pourquoi |
+|----------|----------|
+| Extraction ConfigSteps.jsx partagé | Évite la duplication entre Onboarding (wizard linéaire) et ConfigPanel (onglets libres) |
+| Navigation par state `view` au lieu de react-router | App simple mono-page, pas besoin de deep links pour config/decisions |
+| `configToFormState()` / `formStateToConfig()` | Le format Supabase (map sender_priorities, array keyword_flags) ≠ format formulaire (array senders, array avec enabled) — conversion bidirectionnelle propre |
+| days_waiting calculé dynamiquement | Plus fiable que de stocker une valeur statique qui se périme — recalculé à chaque requête |
+| decisions-check appelle checkReplyExists par email | Vérifie le thread Gmail pour détecter si l'utilisateur a répondu — pas de polling permanent, déclenché manuellement |
+| Boutons icônes (engrenage, clipboard) au lieu de texte | Gagne de l'espace dans le header mobile-first sans sacrifier la clarté |
+
+### Problèmes rencontrés
+
+- **Aucun bloquant technique** — toutes les phases ont été complétées sans erreur
+- **Migration 002 nécessaire** : la table `email_metadata` n'avait pas de colonne `priority_score` ni `suggested_action`, et `decisions` n'avait pas de contrainte unique pour l'upsert — résolu par `002_analyze_fields.sql`
+- **Duplication de code getAccessToken()** : la même logique de refresh token existe dans `emails-sync.js`, `emails-analyze.js` et `decisions-check.js` — à factoriser dans un utilitaire commun lors du polish (Phase 6)
+- **Build size** : 258 KB (80 KB gzippé) pour 53 modules — raisonnable pour un MVP, mais à surveiller
+
 ### Prochaines étapes
 
-1. **Provisionner les services** pour test end-to-end
-2. **Phase 6 — Polish + tests**
+1. **Provisionner les services** pour test end-to-end :
+   - Google Cloud Console : projet + Gmail API + OAuth consent screen + credentials
+   - Supabase : projet + exécuter `001_initial.sql` puis `002_analyze_fields.sql`
+   - Remplir `.env` avec toutes les clés
+2. **Phase 6 — Polish + tests** :
+   - Factoriser `getAccessToken()` dans un utilitaire partagé
+   - Ajouter gestion d'erreurs plus granulaire (token révoqué, quota Gmail, etc.)
+   - Tests manuels end-to-end du flow complet
+   - Responsive design check sur mobile
+   - Optimisation bundle si nécessaire
+
+### Contexte pour reprise
+
+- **Git** : 3 commits sur `origin/main`, tout poussé
+- **Toutes les phases fonctionnelles (1–5)** sont complétées — le code compile et le build passe
+- **Non testé end-to-end** : aucun service externe provisionné (Google Cloud, Supabase)
+- Pour tester : voir la checklist de provisionnement dans la Session 1
+- **Fichiers clés modifiés cette session** : Dashboard.jsx (réécrit), App.jsx (navigation 3 vues), Onboarding.jsx (refactoré), api.js (+3 wrappers)
+- **Nouveaux fichiers** : ConfigSteps.jsx, ConfigPanel.jsx, DecisionTracker.jsx, useAnalyses.js, useDecisions.js, decisions-list.js, decisions-check.js

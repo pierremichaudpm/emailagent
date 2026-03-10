@@ -76,6 +76,36 @@ Le format normalisé : `{ id, threadId, from: {name, email, domain}, to, subject
 
 Pour ajouter Outlook : créer `providers/outlook.js`, l'enregistrer dans `providers/index.js`.
 
+### Pipeline d'analyse IA
+
+```
+emails-analyze.js (orchestrateur)
+  → fetch emails via provider (Gmail API)
+  → filtre ceux déjà analysés dans email_metadata
+  → claude.js : batch de 10 emails → Claude Sonnet → JSON structuré
+      (summary, category, priority_score, decision_required, deadline, amounts, people, suggested_action)
+  → prioritize.js : score IA + bonus config user → priority_level final
+      (expéditeur critique +3, mots-clés +1/match, montant ≥ seuil +2, deadline ≤ 3j +2, etc.)
+  → upsert email_metadata + création auto dans decisions si decision_required
+  → retourne tout trié par priorité
+```
+
+Niveaux de priorité : critical (9-10), high (7-8), normal (4-6), low (1-3)
+
+### Navigation frontend
+
+```
+App.jsx (state: view)
+  ├── login screen (si pas de compte)
+  ├── Onboarding wizard (si pas de config)
+  ├── Dashboard (vue par défaut)
+  │   ├── bouton « Analyser » → appel emails-analyze
+  │   ├── icône clipboard → DecisionTracker
+  │   └── icône engrenage → ConfigPanel
+  ├── ConfigPanel (édition config en 4 onglets)
+  └── DecisionTracker (en attente / résolues + vérification)
+```
+
 ### Sécurité — non négociable
 
 - OAuth 2.0 uniquement, jamais de mots de passe email

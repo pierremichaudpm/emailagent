@@ -29,3 +29,8 @@ export function saveConfig(email, config) {
     body: JSON.stringify({ email, config }),
   });
 }
+
+export function analyzeEmails(email, provider = 'gmail', opts = {}) {
+  const params = new URLSearchParams({ email, provider, ...opts });
+  return request(`/emails-analyze?${params}`);
+}

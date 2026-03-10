@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { useAccount } from './hooks/useAccount';
 import { useConfig } from './hooks/useConfig';
 import AuthButton from './components/AuthButton';
 import Dashboard from './components/Dashboard';
 import Onboarding from './components/Onboarding';
+import ConfigPanel from './components/ConfigPanel';
 
 export default function App() {
   const { account, disconnect } = useAccount();
   const { config, configLoading, saveConfig } = useConfig(account);
+  const [showConfig, setShowConfig] = useState(false);
 
   if (!account) {
     return (
@@ -37,9 +40,23 @@ export default function App() {
     return <Onboarding account={account} onComplete={saveConfig} />;
   }
 
+  if (showConfig) {
+    return (
+      <ConfigPanel
+        config={config}
+        onSave={saveConfig}
+        onClose={() => setShowConfig(false)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Dashboard account={account} onDisconnect={disconnect} />
+      <Dashboard
+        account={account}
+        onDisconnect={disconnect}
+        onOpenConfig={() => setShowConfig(true)}
+      />
     </div>
   );
 }

@@ -25,11 +25,14 @@ email-agent/
 │   ├── emails-sync.js         # GET — fetch emails via provider
 │   ├── config-get.js          # GET — lire user_configs
 │   ├── config-update.js       # POST — upsert user_configs
+│   ├── emails-analyze.js      # GET — batch analyse IA → résumés + priorités
 │   ├── providers/
 │   │   ├── base.js            # Interface abstraite EmailProvider
 │   │   ├── gmail.js           # Implémentation Gmail API
 │   │   └── index.js           # Factory: getProvider('gmail')
 │   └── utils/
+│       ├── claude.js           # Prompt builder + appel Claude API
+│       ├── prioritize.js       # Scoring de priorité (IA + config user)
 │       ├── supabase.js        # Client singleton (service role)
 │       └── tokens.js          # AES-256-GCM encrypt/decrypt
 ├── src/
@@ -38,16 +41,20 @@ email-agent/
 │   ├── index.css              # @import "tailwindcss"
 │   ├── components/
 │   │   ├── AuthButton.jsx     # Bouton connexion Gmail
-│   │   ├── Dashboard.jsx      # Liste emails + header
+│   │   ├── ConfigPanel.jsx    # Édition config post-onboarding (onglets)
+│   │   ├── ConfigSteps.jsx    # Composants formulaire partagés (Onboarding + ConfigPanel)
+│   │   ├── Dashboard.jsx      # Dashboard enrichi (compteurs, priorités, résumés IA)
 │   │   └── Onboarding.jsx     # Wizard 4 étapes config initiale
 │   ├── hooks/
 │   │   ├── useAccount.js      # État auth (localStorage)
+│   │   ├── useAnalyses.js     # Fetch analyses IA + état
 │   │   ├── useConfig.js       # Charger/sauvegarder user_configs
 │   │   └── useEmails.js       # Fetch emails + loading/error
 │   └── lib/
 │       └── api.js             # Fetch wrappers → Netlify Functions
 └── supabase/migrations/
-    └── 001_initial.sql        # Tables: accounts, user_configs, email_metadata, decisions
+    ├── 001_initial.sql        # Tables: accounts, user_configs, email_metadata, decisions
+    └── 002_analyze_fields.sql # Ajout priority_score, suggested_action, unique decisions
 ```
 
 ### Architecture email multi-provider
@@ -110,8 +117,8 @@ TOKEN_ENCRYPTION_KEY=    # 64 hex chars: node -e "console.log(require('crypto').
 |-------|---------|--------|
 | 1 | Setup + abstraction provider + auth Gmail + sync | **Fait** |
 | 1.5 | Onboarding wizard (config initiale) | **Fait** |
-| 2 | ConfigPanel (modifier config post-onboarding) | À faire |
-| 3 | Analyse IA (emails-analyze, claude.js, prioritize.js) | À faire |
-| 4 | Dashboard enrichi (priorités, résumés, compteurs) | À faire |
+| 2 | ConfigPanel (modifier config post-onboarding) | **Fait** |
+| 3 | Analyse IA (emails-analyze, claude.js, prioritize.js) | **Fait** |
+| 4 | Dashboard enrichi (priorités, résumés, compteurs) | **Fait** |
 | 5 | Suivi de décisions (scheduled function, tracker) | À faire |
 | 6 | Polish + tests internes JAXA | À faire |

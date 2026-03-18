@@ -14,7 +14,10 @@ export function useConfig(account) {
     setLoading(true);
     getConfig(account.email)
       .then((data) => setConfig(data.config))
-      .catch(() => setConfig(null))
+      .catch((err) => {
+        console.error('Config load error:', err);
+        setConfig(null);
+      })
       .finally(() => setLoading(false));
   }, [account]);
 
@@ -22,7 +25,9 @@ export function useConfig(account) {
     async (newConfig) => {
       if (!account) return;
       await saveConfig(account.email, newConfig);
-      setConfig(newConfig);
+      // Re-fetch to get the full config with server-side fields (updated_at, etc.)
+      const fresh = await getConfig(account.email);
+      setConfig(fresh.config || newConfig);
     },
     [account]
   );

@@ -17,13 +17,13 @@ function StepIndicator({ current }) {
         <div key={label} className="flex items-center gap-2">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-              i <= current ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+              i <= current ? 'bg-brand-500 text-white' : 'bg-stone-200 text-gray-400'
             }`}
           >
             {i + 1}
           </div>
           {i < STEPS.length - 1 && (
-            <div className={`w-8 h-0.5 ${i < current ? 'bg-blue-600' : 'bg-gray-200'}`} />
+            <div className={`w-8 h-0.5 ${i < current ? 'bg-brand-500' : 'bg-stone-200'}`} />
           )}
         </div>
       ))}
@@ -34,6 +34,7 @@ function StepIndicator({ current }) {
 export default function Onboarding({ account, onComplete }) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
   const [context, setContext] = useState('');
   const [senders, setSenders] = useState([{ address: '', level: 'high', label: '' }]);
@@ -51,16 +52,18 @@ export default function Onboarding({ account, onComplete }) {
 
   async function handleFinish() {
     setSaving(true);
+    setError(null);
     try {
       const config = formStateToConfig({ context, senders, keywordGroups, amountThreshold, staleDays });
       await onComplete(config);
-    } catch {
+    } catch (err) {
+      setError(err.message || 'Erreur lors de l\'enregistrement');
       setSaving(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-start justify-center pt-12 px-4">
+    <div className="min-h-screen flex items-start justify-center pt-12 px-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Configuration initiale</h1>
@@ -69,8 +72,8 @@ export default function Onboarding({ account, onComplete }) {
 
         <StepIndicator current={step} />
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          {step === 0 && <StepContext context={context} onChange={setContext} />}
+        <div className="bg-white rounded-2xl shadow-sm border border-stone-200/80 p-6 sm:p-8">
+          {step === 0 && <StepContext context={context} onChange={setContext} account={account} />}
           {step === 1 && <StepSenders senders={senders} onChange={setSenders} />}
           {step === 2 && (
             <StepKeywords
@@ -90,11 +93,15 @@ export default function Onboarding({ account, onComplete }) {
             />
           )}
 
+          {error && (
+            <div className="mt-4 p-3 rounded-xl bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
+          )}
+
           <div className="flex justify-between mt-8">
             <button
               onClick={() => setStep(step - 1)}
               disabled={step === 0}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-0"
+              className="rounded-xl border border-stone-200 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-white disabled:opacity-0 transition-colors"
             >
               Précédent
             </button>
@@ -102,7 +109,7 @@ export default function Onboarding({ account, onComplete }) {
             {step < STEPS.length - 1 ? (
               <button
                 onClick={() => setStep(step + 1)}
-                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition-colors"
               >
                 Suivant
               </button>
@@ -110,7 +117,7 @@ export default function Onboarding({ account, onComplete }) {
               <button
                 onClick={handleFinish}
                 disabled={saving}
-                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50 transition-colors"
               >
                 {saving ? 'Enregistrement...' : 'Terminer'}
               </button>

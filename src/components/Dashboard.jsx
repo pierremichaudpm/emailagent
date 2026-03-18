@@ -185,7 +185,7 @@ function formatRelativeDate(date) {
   return date.toLocaleDateString('fr-CA');
 }
 
-export default function Dashboard({ account, onDisconnect, onOpenConfig, onOpenDecisions }) {
+export default function Dashboard({ account, onDisconnect, onOpenConfig, onOpenDecisions, onOpenBriefing }) {
   const { emails, loading, error: syncError, refresh } = useEmails(account);
   const { analyses, analyzing, error: analyzeError, stats, analyze } = useAnalyses(account);
   const [expandedId, setExpandedId] = useState(null);
@@ -252,11 +252,22 @@ export default function Dashboard({ account, onDisconnect, onOpenConfig, onOpenD
                 </svg>
               </button>
             )}
+            {onOpenBriefing && (
+              <button
+                onClick={onOpenBriefing}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Briefing
+              </button>
+            )}
             <button
               onClick={onDisconnect}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-50"
+              title="Déconnecter"
             >
-              Déconnecter
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
             </button>
           </div>
         </div>
@@ -292,7 +303,7 @@ export default function Dashboard({ account, onDisconnect, onOpenConfig, onOpenD
       )}
 
       {/* Vue analysée */}
-      {view === 'analyzed' && hasAnalyses && !analyzing && (
+      {view === 'analyzed' && hasAnalyses && (
         <>
           <StatsBar analyses={analyses} />
           <div>

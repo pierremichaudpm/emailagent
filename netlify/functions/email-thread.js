@@ -6,43 +6,40 @@ export default async (req) => {
   try {
     const url = new URL(req.url);
     const email = url.searchParams.get('email');
+    const threadId = url.searchParams.get('threadId');
     const providerName = url.searchParams.get('provider') || 'gmail';
-    const maxResults = parseInt(url.searchParams.get('maxResults') || '20', 10);
-    const query = url.searchParams.get('query') || 'in:inbox';
 
-    if (!email) {
-      return new Response(JSON.stringify({ error: 'Paramètre email requis' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
+    if (!email || !threadId) {
+      return new Response(JSON.stringify({ error: 'email et threadId requis' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const supabase = getSupabase();
-    const { data: account, error: dbError } = await supabase
+    const { data: account, error: accountError } = await supabase
       .from('accounts')
       .select('*')
       .eq('email', email)
       .eq('provider', providerName)
       .single();
 
-    if (dbError || !account) {
+    if (accountError || !account) {
       return new Response(JSON.stringify({ error: 'Compte non trouvé' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
+        status: 404, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const accessToken = await getAccessToken(account);
     const provider = getProvider(providerName);
-    const emails = await provider.fetchEmails(accessToken, { maxResults, query });
+    const messages = await provider.getThread(accessToken, threadId);
 
-    return new Response(JSON.stringify({ emails, count: emails.length }), {
+    return new Response(JSON.stringify({ messages }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
+    console.error('email-thread error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
 };

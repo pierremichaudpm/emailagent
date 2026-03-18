@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { launchProfileGeneration, pollProfileStatus } from '../lib/api';
 
 export const DEFAULT_KEYWORDS = [
   { keywords: ['urgent', 'deadline', 'échéance', 'immédiat'], level: 'critical', enabled: true },
@@ -6,20 +7,90 @@ export const DEFAULT_KEYWORDS = [
   { keywords: ['facture', 'paiement', 'montant', 'contrat'], level: 'high', enabled: true },
 ];
 
-export function StepContext({ context, onChange }) {
+export function StepContext({ context, onChange, account }) {
+  const [generating, setGenerating] = useState(false);
+  const [genStatus, setGenStatus] = useState('');
+  const pollRef = useRef(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  function startPolling() {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await pollProfileStatus(account.email);
+        setGenStatus(data.progress || '');
+
+        if (data.status === 'done') {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setGenerating(false);
+          if (data.context) onChange(data.context);
+        } else if (data.status === 'error') {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setGenerating(false);
+          setGenStatus(`Erreur : ${data.progress}`);
+        }
+      } catch {}
+    }, 3000);
+  }
+
+  async function handleAutoGenerate() {
+    if (!account) return;
+    setGenerating(true);
+    setGenStatus('Démarrage...');
+    onChange('');
+
+    try {
+      await launchProfileGeneration(account.email, account.provider);
+      startPolling();
+    } catch (err) {
+      setGenStatus(`Erreur : ${err.message}`);
+      setGenerating(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold text-gray-900">Votre contexte professionnel</h2>
       <p className="text-gray-600">
-        Décrivez brièvement votre rôle. Cette information aide l'IA à mieux comprendre vos courriels
-        et à personnaliser ses suggestions.
+        Plus le contexte est riche, plus les réponses IA seront pertinentes.
+        Vous pouvez le rédiger manuellement ou le générer automatiquement à partir de vos courriels.
       </p>
+
+      {account && (
+        <button
+          onClick={handleAutoGenerate}
+          disabled={generating}
+          className="w-full py-3 rounded-xl border-2 border-dashed border-brand-500/40 text-brand-600 hover:bg-brand-50 disabled:opacity-50 font-medium text-sm"
+        >
+          {generating ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+              {genStatus}
+            </span>
+          ) : (
+            'Générer mon profil automatiquement à partir de mes courriels'
+          )}
+        </button>
+      )}
+
+      {genStatus && !generating && (
+        <p className="text-sm text-green-600">{genStatus}</p>
+      )}
+
       <textarea
         value={context}
         onChange={(e) => onChange(e.target.value)}
-        rows={4}
-        className="w-full rounded-lg border border-gray-300 p-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-        placeholder="Ex: Je suis gestionnaire de production chez JAXA Production. Je coordonne des événements avec la Ville de Montréal, des commanditaires et des fournisseurs techniques."
+        rows={12}
+        className="w-full rounded-xl border border-stone-200 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+        placeholder={"Ex: Je suis Virginie Jaffredo, productrice numérique et présidente de JAXA Production inc., basée à Montréal...\n\nOu cliquez le bouton ci-dessus pour générer automatiquement."}
       />
     </div>
   );
@@ -49,25 +120,25 @@ export function StepSenders({ senders, onChange }) {
 
       <div className="space-y-3">
         {senders.map((sender, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-gray-50">
+          <div key={i} className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-stone-50">
             <input
               type="text"
               value={sender.address}
               onChange={(e) => updateSender(i, 'address', e.target.value)}
               placeholder="ex: ville.montreal.qc.ca"
-              className="flex-1 min-w-[180px] rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="flex-1 min-w-[180px] rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             />
             <input
               type="text"
               value={sender.label}
               onChange={(e) => updateSender(i, 'label', e.target.value)}
               placeholder="Label (optionnel)"
-              className="flex-1 min-w-[140px] rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="flex-1 min-w-[140px] rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             />
             <select
               value={sender.level}
               onChange={(e) => updateSender(i, 'level', e.target.value)}
-              className="rounded border border-gray-300 px-3 py-2 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="rounded-xl border border-stone-200 px-3 py-2 text-sm bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             >
               <option value="critical">Critique</option>
               <option value="high">Important</option>
@@ -87,7 +158,7 @@ export function StepSenders({ senders, onChange }) {
 
       <button
         onClick={addSender}
-        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+        className="inline-flex items-center gap-1 text-sm text-brand-500 hover:text-brand-700 font-medium"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -121,7 +192,7 @@ export function StepKeywords({ keywordGroups, onChange, customKeyword, onCustomK
             onClick={() => toggleGroup(i)}
             className={`w-full text-left p-3 rounded-lg border transition-colors ${
               group.enabled
-                ? 'border-blue-300 bg-blue-50'
+                ? 'border-brand-500/40 bg-brand-50'
                 : 'border-gray-200 bg-gray-50 opacity-60'
             }`}
           >
@@ -142,7 +213,7 @@ export function StepKeywords({ keywordGroups, onChange, customKeyword, onCustomK
               </div>
               <div
                 className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                  group.enabled ? 'border-blue-600 bg-blue-600' : 'border-gray-300'
+                  group.enabled ? 'border-brand-500 bg-brand-500' : 'border-gray-300'
                 }`}
               >
                 {group.enabled && (
@@ -163,12 +234,12 @@ export function StepKeywords({ keywordGroups, onChange, customKeyword, onCustomK
           onChange={(e) => onCustomKeywordChange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onAddCustom()}
           placeholder="Ajouter un mot-clé..."
-          className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          className="flex-1 rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
         />
         <button
           onClick={onAddCustom}
           disabled={!customKeyword.trim()}
-          className="rounded bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+          className="rounded-xl bg-stone-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
         >
           Ajouter
         </button>
@@ -200,7 +271,7 @@ export function StepThresholds({ amountThreshold, staleDays, onAmountChange, onD
               onChange={(e) => onAmountChange(Number(e.target.value))}
               min={0}
               step={500}
-              className="w-32 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-32 rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             />
             <span className="text-sm text-gray-500">$</span>
           </div>
@@ -220,7 +291,7 @@ export function StepThresholds({ amountThreshold, staleDays, onAmountChange, onD
               onChange={(e) => onDaysChange(Number(e.target.value))}
               min={1}
               max={30}
-              className="w-32 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-32 rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             />
             <span className="text-sm text-gray-500">jours</span>
           </div>

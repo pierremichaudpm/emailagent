@@ -28,9 +28,18 @@ export function computePriority(analysis, email, config) {
   }
 
   // 2. Bonus mots-clés déclencheurs
-  const keywords = config.keyword_flags || [];
+  const keywordFlags = config.keyword_flags || [];
   const text = `${email.subject} ${email.snippet || ''}`.toLowerCase();
-  const matchedKeywords = keywords.filter((kw) => text.includes(kw.toLowerCase()));
+  const matchedKeywords = [];
+  for (const group of keywordFlags) {
+    // Support format objet {level, keywords: [...]} ou string simple
+    const words = Array.isArray(group.keywords) ? group.keywords : (typeof group === 'string' ? [group] : []);
+    for (const kw of words) {
+      if (typeof kw === 'string' && text.includes(kw.toLowerCase())) {
+        matchedKeywords.push(kw);
+      }
+    }
+  }
   if (matchedKeywords.length > 0) {
     score = Math.min(10, score + matchedKeywords.length);
     reasons.push(`mots-clés : ${matchedKeywords.join(', ')}`);
@@ -73,6 +82,11 @@ export function computePriority(analysis, email, config) {
     reasons.push(`en attente depuis ${Math.floor(emailAge)} jours`);
   }
 
+  // Cap : le bonus config ne peut pas ajouter plus de 4 points au score IA
+  const baseScore = analysis.priority_score || 5;
+  score = Math.min(baseScore + 4, score);
+  score = Math.max(1, Math.min(10, score));
+
   // Conversion score → level
   const priority_level = scoreToLevel(score);
 
@@ -91,11 +105,13 @@ function findSenderPriority(email, senderPriorities) {
   const normalized = email.toLowerCase();
 
   // Match exact
-  if (senderPriorities[normalized]) return senderPriorities[normalized];
+  const exact = senderPriorities[normalized];
+  if (exact) return typeof exact === 'string' ? exact : exact.level || null;
 
   // Match par domaine
   const domain = normalized.split('@')[1];
-  if (domain && senderPriorities[`@${domain}`]) return senderPriorities[`@${domain}`];
+  const domainMatch = domain && senderPriorities[`@${domain}`];
+  if (domainMatch) return typeof domainMatch === 'string' ? domainMatch : domainMatch.level || null;
 
   return null;
 }

@@ -15,12 +15,12 @@ const TABS = [
   { id: 'thresholds', label: 'Seuils' },
 ];
 
-export default function ConfigPanel({ config, onSave, onClose }) {
+export default function ConfigPanel({ config, account, onSave, onClose }) {
   const [activeTab, setActiveTab] = useState('context');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Initialiser depuis la config existante
   const initial = configToFormState(config);
   const [context, setContext] = useState(initial.context);
   const [senders, setSenders] = useState(initial.senders);
@@ -39,41 +39,41 @@ export default function ConfigPanel({ config, onSave, onClose }) {
   async function handleSave() {
     setSaving(true);
     setSaved(false);
+    setError(null);
     try {
       const newConfig = formStateToConfig({ context, senders, keywordGroups, amountThreshold, staleDays });
       await onSave(newConfig);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      // erreur gérée en amont
+    } catch (err) {
+      setError(err.message || 'Erreur lors de l\'enregistrement');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-2xl mx-auto flex items-center justify-between p-4">
-          <h1 className="text-lg font-semibold text-gray-900">Configuration</h1>
+    <div className="min-h-screen">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-stone-200/60 sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto flex items-center justify-between px-4 sm:px-6 py-4">
+          <h1 className="text-lg font-bold text-gray-900">Configuration</h1>
           <button
             onClick={onClose}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-xl border border-stone-200 px-4 py-2 text-sm text-gray-600 hover:bg-white font-medium transition-colors"
           >
             Retour
           </button>
         </div>
 
-        {/* Onglets */}
-        <div className="max-w-2xl mx-auto px-4 flex gap-1 pb-0">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 flex gap-1 pb-0">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
                 activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-brand-500 text-brand-700'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
               {tab.label}
@@ -82,10 +82,10 @@ export default function ConfigPanel({ config, onSave, onClose }) {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto p-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-stone-200/80 p-6 sm:p-8">
           {activeTab === 'context' && (
-            <StepContext context={context} onChange={setContext} />
+            <StepContext context={context} onChange={setContext} account={account} />
           )}
           {activeTab === 'senders' && (
             <StepSenders senders={senders} onChange={setSenders} />
@@ -108,14 +108,18 @@ export default function ConfigPanel({ config, onSave, onClose }) {
             />
           )}
 
-          <div className="flex items-center justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
+          {error && (
+            <div className="mt-4 p-3 rounded-xl bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 mt-8 pt-4 border-t border-stone-100">
             {saved && (
-              <span className="text-sm text-green-600 font-medium">Enregistré</span>
+              <span className="text-sm text-emerald-600 font-semibold">Enregistré</span>
             )}
             <button
               onClick={handleSave}
               disabled={saving}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50 transition-colors"
             >
               {saving ? 'Enregistrement...' : 'Enregistrer'}
             </button>

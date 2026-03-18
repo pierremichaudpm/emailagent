@@ -1,34 +1,6 @@
 import { getProvider } from './providers/index.js';
 import { getSupabase } from './utils/supabase.js';
-import { decrypt, encrypt } from './utils/tokens.js';
-
-async function getAccessToken(account) {
-  const provider = getProvider(account.provider);
-  const now = new Date();
-  const expiresAt = new Date(account.token_expires_at);
-
-  if (expiresAt > now) {
-    return decrypt(account.access_token);
-  }
-
-  if (!account.refresh_token) {
-    throw new Error('Token expiré et aucun refresh token disponible');
-  }
-
-  const refreshToken = decrypt(account.refresh_token);
-  const newTokens = await provider.refreshToken(refreshToken);
-
-  const supabase = getSupabase();
-  await supabase
-    .from('accounts')
-    .update({
-      access_token: encrypt(newTokens.accessToken),
-      token_expires_at: newTokens.expiresAt,
-    })
-    .eq('id', account.id);
-
-  return newTokens.accessToken;
-}
+import { getAccessToken } from './utils/auth.js';
 
 export default async (req) => {
   try {
@@ -86,7 +58,6 @@ export default async (req) => {
       const hasReply = await provider.checkReplyExists(accessToken, decision.email_id);
 
       if (hasReply) {
-        // Marquer comme résolu
         await supabase
           .from('decisions')
           .update({
@@ -98,7 +69,6 @@ export default async (req) => {
           .eq('id', decision.id);
         resolved++;
       } else {
-        // Mettre à jour days_waiting et last_checked
         await supabase
           .from('decisions')
           .update({

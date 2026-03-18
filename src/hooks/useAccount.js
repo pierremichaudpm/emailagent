@@ -18,7 +18,9 @@ export function useAccount() {
     } else {
       // Charger depuis localStorage
       const saved = localStorage.getItem('account');
-      if (saved) setAccount(JSON.parse(saved));
+      if (saved) {
+        try { setAccount(JSON.parse(saved)); } catch { localStorage.removeItem('account'); }
+      }
     }
   }, []);
 

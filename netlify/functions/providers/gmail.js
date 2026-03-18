@@ -1,15 +1,12 @@
-import { google } from 'googleapis';
 import { EmailProvider } from './base.js';
 
-const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.compose',
+];
 
-function getOAuth2Client() {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
-}
+const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
 function parseHeader(headers, name) {
   const h = headers.find((h) => h.name.toLowerCase() === name.toLowerCase());
@@ -51,16 +48,36 @@ function normalizeMessage(msg) {
   return {
     id: msg.id,
     threadId: msg.threadId,
+    messageId: parseHeader(headers, 'Message-ID') || parseHeader(headers, 'Message-Id'),
     from: parseAddress(parseHeader(headers, 'From')),
     to: parseAddressList(parseHeader(headers, 'To')),
     subject: parseHeader(headers, 'Subject'),
     date: parseHeader(headers, 'Date'),
     snippet: msg.snippet || '',
     body: decodeBody(msg.payload || {}),
+    labels: msg.labelIds || [],
     threadCount: null,
     hasAttachments: (msg.payload?.parts || []).some((p) => p.filename && p.filename.length > 0),
-    labels: msg.labelIds || [],
   };
+}
+
+async function gmailFetch(accessToken, path, opts = {}) {
+  const res = await fetch(`${GMAIL_API}${path}`, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...opts.headers,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    if (res.status === 403 && err.includes('SCOPE_INSUFFICIENT')) {
+      throw new Error('Permissions insuffisantes. Déconnectez-vous et reconnectez-vous.');
+    }
+    throw new Error(`Gmail API error (${res.status}): ${err}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
 }
 
 export class GmailProvider extends EmailProvider {
@@ -69,93 +86,158 @@ export class GmailProvider extends EmailProvider {
   }
 
   getAuthUrl(state) {
-    const client = getOAuth2Client();
-    return client.generateAuthUrl({
+    const params = new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+      response_type: 'code',
+      scope: SCOPES.join(' '),
       access_type: 'offline',
       prompt: 'consent',
-      scope: SCOPES,
       state,
     });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
   }
 
   async authenticate(code) {
-    const client = getOAuth2Client();
-    const { tokens } = await client.getToken(code);
-    client.setCredentials(tokens);
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }),
+    });
 
-    const gmail = google.gmail({ version: 'v1', auth: client });
-    const profile = await gmail.users.getProfile({ userId: 'me' });
+    if (!tokenRes.ok) {
+      throw new Error(`Token exchange failed (${tokenRes.status})`);
+    }
+
+    const tokens = await tokenRes.json();
+
+    const profile = await gmailFetch(tokens.access_token, '/profile');
 
     return {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
-      expiresAt: new Date(tokens.expiry_date).toISOString(),
-      email: profile.data.emailAddress,
+      expiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      email: profile.emailAddress,
     };
   }
 
   async refreshToken(refreshToken) {
-    const client = getOAuth2Client();
-    client.setCredentials({ refresh_token: refreshToken });
-    const { credentials } = await client.refreshAccessToken();
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`Token refresh failed (${res.status})`);
+    }
+    const tokens = await res.json();
     return {
-      accessToken: credentials.access_token,
-      expiresAt: new Date(credentials.expiry_date).toISOString(),
+      accessToken: tokens.access_token,
+      expiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     };
   }
 
   async revokeAccess(token) {
-    const client = getOAuth2Client();
-    await client.revokeToken(token);
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, { method: 'POST' });
   }
 
   async fetchEmails(accessToken, opts = {}) {
     const { maxResults = 20, query = 'in:inbox' } = opts;
-    const client = getOAuth2Client();
-    client.setCredentials({ access_token: accessToken });
-    const gmail = google.gmail({ version: 'v1', auth: client });
 
-    const list = await gmail.users.messages.list({
-      userId: 'me',
-      maxResults,
-      q: query,
-    });
+    const params = new URLSearchParams({ maxResults: String(maxResults), q: query });
+    const list = await gmailFetch(accessToken, `/messages?${params}`);
 
-    if (!list.data.messages) return [];
+    if (!list.messages) return [];
 
     const messages = await Promise.all(
-      list.data.messages.map((m) =>
-        gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' })
+      list.messages.map((m) =>
+        gmailFetch(accessToken, `/messages/${m.id}?format=full`)
       )
     );
 
-    return messages.map((m) => normalizeMessage(m.data));
+    return messages.map(normalizeMessage);
   }
 
   async getThread(accessToken, threadId) {
-    const client = getOAuth2Client();
-    client.setCredentials({ access_token: accessToken });
-    const gmail = google.gmail({ version: 'v1', auth: client });
-
-    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' });
-    const messages = (thread.data.messages || []).map(normalizeMessage);
+    const data = await gmailFetch(accessToken, `/threads/${threadId}?format=full`);
+    const messages = (data.messages || []).map(normalizeMessage);
     messages.forEach((m) => (m.threadCount = messages.length));
     return messages;
   }
 
+  _buildRfc2822({ to, subject, body, from, inReplyTo, references }) {
+    const lines = [
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
+      `Content-Type: text/plain; charset=utf-8`,
+      `MIME-Version: 1.0`,
+    ];
+    if (inReplyTo) lines.push(`In-Reply-To: ${inReplyTo}`);
+    if (references) lines.push(`References: ${references}`);
+    lines.push('', body);
+    return Buffer.from(lines.join('\r\n')).toString('base64url');
+  }
+
+  async createDraft(accessToken, { to, subject, body, threadId, inReplyTo, references, from }) {
+    const raw = this._buildRfc2822({
+      to,
+      subject: subject.startsWith('Re: ') ? subject : `Re: ${subject}`,
+      body,
+      from,
+      inReplyTo,
+      references,
+    });
+
+    const data = await gmailFetch(accessToken, '/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: { raw, threadId } }),
+    });
+
+    return { draftId: data.id, messageId: data.message?.id };
+  }
+
+  async sendDraft(accessToken, draftId) {
+    const data = await gmailFetch(accessToken, '/drafts/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: draftId }),
+    });
+
+    return { messageId: data.id, threadId: data.threadId };
+  }
+
+  async deleteDraft(accessToken, draftId) {
+    const res = await fetch(`${GMAIL_API}/drafts/${draftId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`Erreur suppression brouillon (${res.status})`);
+    }
+  }
+
   async checkReplyExists(accessToken, emailId) {
-    const client = getOAuth2Client();
-    client.setCredentials({ access_token: accessToken });
-    const gmail = google.gmail({ version: 'v1', auth: client });
+    const msg = await gmailFetch(accessToken, `/messages/${emailId}?format=metadata`);
+    const threadId = msg.threadId;
 
-    const msg = await gmail.users.messages.get({ userId: 'me', id: emailId, format: 'metadata' });
-    const threadId = msg.data.threadId;
+    const thread = await gmailFetch(accessToken, `/threads/${threadId}?format=metadata`);
+    const messages = thread.messages || [];
 
-    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'metadata' });
-    const messages = thread.data.messages || [];
-
-    const profile = await gmail.users.getProfile({ userId: 'me' });
-    const userEmail = profile.data.emailAddress;
+    const profile = await gmailFetch(accessToken, '/profile');
+    const userEmail = profile.emailAddress;
 
     const msgIndex = messages.findIndex((m) => m.id === emailId);
     const laterMessages = messages.slice(msgIndex + 1);

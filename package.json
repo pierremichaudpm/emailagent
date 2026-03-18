@@ -12,10 +12,8 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@netlify/functions": "^5.1.2",
     "@supabase/supabase-js": "^2.98.0",
-    "googleapis": "^171.4.0",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.1"
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",

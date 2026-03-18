@@ -5,8 +5,19 @@ async function request(path, options = {}) {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`Erreur serveur (${res.status})`);
+  }
+  if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('account');
+      window.location.reload();
+    }
+    throw new Error(data.error || `Erreur serveur (${res.status})`);
+  }
   return data;
 }
 
@@ -44,4 +55,92 @@ export function listDecisions(email, status) {
 export function checkDecisions(email, provider = 'gmail') {
   const params = new URLSearchParams({ email, provider });
   return request(`/decisions-check?${params}`);
+}
+
+export function dismissEmail(userId, emailId, provider = 'gmail') {
+  return request('/email-dismiss', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, email_id: emailId, provider }),
+  });
+}
+
+export function launchProfileGeneration(userId, provider = 'gmail') {
+  return request('/profile-generate', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, provider }),
+  });
+}
+
+export function pollProfileStatus(email) {
+  return request(`/profile-generate?email=${encodeURIComponent(email)}`);
+}
+
+export function getEmailThread(email, threadId, provider = 'gmail') {
+  const params = new URLSearchParams({ email, threadId, provider });
+  return request(`/email-thread?${params}`);
+}
+
+export function generateDraft(userId, emailId, provider = 'gmail') {
+  return request('/draft-generate', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, email_id: emailId, provider }),
+  });
+}
+
+export function sendDraft(userId, draftId, emailId, provider = 'gmail') {
+  return request('/draft-send', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, draft_id: draftId, email_id: emailId, provider }),
+  });
+}
+
+export function refineDraft(userId, emailId, draftId, instruction, currentBody, currentSubject, currentTone, provider = 'gmail') {
+  return request('/draft-refine', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: userId,
+      email_id: emailId,
+      draft_id: draftId,
+      instruction,
+      current_body: currentBody,
+      current_subject: currentSubject,
+      current_tone: currentTone,
+      provider,
+    }),
+  });
+}
+
+export function getDailyQuestion(email) {
+  return request(`/daily-question?email=${encodeURIComponent(email)}`);
+}
+
+export function answerDailyQuestion(userId, type, answer, senderEmail = null, contextAddition = null) {
+  return request('/daily-answer', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: userId,
+      type,
+      answer,
+      sender_email: senderEmail,
+      context_addition: contextAddition,
+    }),
+  });
+}
+
+export function updateDraft(userId, draftId, provider = 'gmail', { emailId, body, subject, to, threadId, inReplyTo, references }) {
+  return request('/draft-update', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: userId,
+      draft_id: draftId,
+      email_id: emailId,
+      provider,
+      body,
+      subject,
+      to,
+      thread_id: threadId,
+      in_reply_to: inReplyTo,
+      references,
+    }),
+  });
 }

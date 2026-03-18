@@ -2,13 +2,13 @@
 
 ## Projet : Agent Courriel — JAXA Production
 
-Agent IA de gestion de courriels. Se connecte à Gmail via OAuth 2.0, analyse avec Claude API, fournit priorités, résumés et suggestions de réponse.
+Assistant email IA pour dirigeants québécois. Se connecte à Gmail via OAuth 2.0, trie les emails par priorité, génère des brouillons de réponse, et permet d'envoyer après validation. Configuration sur mesure sur place.
 
 ### Stack
 
 - **Frontend** : React 19, Vite 7, Tailwind CSS v4 (`@tailwindcss/vite` plugin, pas de config séparé)
 - **Backend** : Netlify Functions v2 (ESM, `export default async (req) => {}`)
-- **Email** : Gmail API via `googleapis` — scope `gmail.readonly` uniquement
+- **Email** : Gmail API (fetch natif) — scope `gmail.readonly` (à étendre pour envoyer/répondre)
 - **IA** : Anthropic Claude API (`claude-sonnet-4-20250514`)
 - **DB** : Supabase (PostgreSQL)
 - **Auth** : Google OAuth 2.0
@@ -25,32 +25,40 @@ email-agent/
 │   ├── emails-sync.js         # GET — fetch emails via provider
 │   ├── config-get.js          # GET — lire user_configs
 │   ├── config-update.js       # POST — upsert user_configs
-│   ├── emails-analyze.js      # GET — batch analyse IA → résumés + priorités
+│   ├── emails-analyze.js      # GET — batch analyse IA → résumés + priorités + nettoyage orphelins
 │   ├── decisions-list.js      # GET — lister décisions (en attente / résolues)
 │   ├── decisions-check.js     # GET — vérifier réponses et résoudre décisions
+│   ├── draft-generate.js      # POST — génère brouillon réponse via Claude + crée dans Gmail Drafts
+│   ├── draft-send.js          # POST — envoie un brouillon Gmail
+│   ├── draft-update.js        # POST — modifie un brouillon (supprime + recrée)
+│   ├── profile-generate.js    # GET/POST — lance et poll la génération de profil auto
+│   ├── profile-generate-background.js # Background function — fetch 2000 emails + analyse + profil
 │   ├── providers/
 │   │   ├── base.js            # Interface abstraite EmailProvider
-│   │   ├── gmail.js           # Implémentation Gmail API
+│   │   ├── gmail.js           # Gmail API (fetch, getThread, createDraft, sendDraft, deleteDraft)
 │   │   └── index.js           # Factory: getProvider('gmail')
 │   └── utils/
-│       ├── claude.js           # Prompt builder + appel Claude API
+│       ├── auth.js             # getAccessToken() — refresh transparent + Supabase update
+│       ├── claude.js           # Prompt builder + analyse + brouillons + profil auto
 │       ├── prioritize.js       # Scoring de priorité (IA + config user)
 │       ├── supabase.js        # Client singleton (service role)
 │       └── tokens.js          # AES-256-GCM encrypt/decrypt
 ├── src/
-│   ├── App.jsx                # Flow: login → onboarding → dashboard/config/decisions
-│   ├── main.jsx               # Entry point + BrowserRouter
+│   ├── App.jsx                # Flow: login → onboarding → briefing/dashboard/config/decisions
+│   ├── main.jsx               # Entry point (StrictMode, pas de router)
 │   ├── index.css              # @import "tailwindcss"
 │   ├── components/
 │   │   ├── AuthButton.jsx     # Bouton connexion Gmail
+│   │   ├── Briefing.jsx       # Vue principale : briefing matin + brouillons + envoi
 │   │   ├── ConfigPanel.jsx    # Édition config post-onboarding (onglets)
-│   │   ├── ConfigSteps.jsx    # Composants formulaire partagés (Onboarding + ConfigPanel)
-│   │   ├── Dashboard.jsx      # Dashboard enrichi (compteurs, priorités, résumés IA)
+│   │   ├── ConfigSteps.jsx    # Composants formulaire partagés + bouton profil auto
+│   │   ├── Dashboard.jsx      # Dashboard legacy (stats, vue brute)
 │   │   ├── DecisionTracker.jsx # Suivi des décisions en attente / résolues
 │   │   └── Onboarding.jsx     # Wizard 4 étapes config initiale
 │   ├── hooks/
 │   │   ├── useAccount.js      # État auth (localStorage)
 │   │   ├── useAnalyses.js     # Fetch analyses IA + état
+│   │   ├── useBriefing.js     # Briefing complet : analyse + brouillons + envoi
 │   │   ├── useConfig.js       # Charger/sauvegarder user_configs
 │   │   ├── useDecisions.js    # Fetch décisions + vérification réponses
 │   │   └── useEmails.js       # Fetch emails + loading/error
@@ -58,7 +66,8 @@ email-agent/
 │       └── api.js             # Fetch wrappers → Netlify Functions
 └── supabase/migrations/
     ├── 001_initial.sql        # Tables: accounts, user_configs, email_metadata, decisions
-    └── 002_analyze_fields.sql # Ajout priority_score, suggested_action, unique decisions
+    ├── 002_analyze_fields.sql # Ajout priority_score, suggested_action, unique decisions
+    └── 003_profile_fields.sql # Ajout profile_status, profile_progress à user_configs
 ```
 
 ### Architecture email multi-provider
@@ -82,7 +91,7 @@ Pour ajouter Outlook : créer `providers/outlook.js`, l'enregistrer dans `provid
 emails-analyze.js (orchestrateur)
   → fetch emails via provider (Gmail API)
   → filtre ceux déjà analysés dans email_metadata
-  → claude.js : batch de 10 emails → Claude Sonnet → JSON structuré
+  → claude.js : batches de 5 emails en parallèle (Promise.all) → Claude Sonnet → JSON structuré
       (summary, category, priority_score, decision_required, deadline, amounts, people, suggested_action)
   → prioritize.js : score IA + bonus config user → priority_level final
       (expéditeur critique +3, mots-clés +1/match, montant ≥ seuil +2, deadline ≤ 3j +2, etc.)
@@ -129,7 +138,7 @@ App.jsx (state: view)
 ```env
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:8888/api/auth-callback?provider=gmail
+GOOGLE_REDIRECT_URI=http://localhost:8888/.netlify/functions/auth-callback
 ANTHROPIC_API_KEY=
 SUPABASE_URL=
 SUPABASE_ANON_KEY=
@@ -155,4 +164,16 @@ TOKEN_ENCRYPTION_KEY=    # 64 hex chars: node -e "console.log(require('crypto').
 | 3 | Analyse IA (emails-analyze, claude.js, prioritize.js) | **Fait** |
 | 4 | Dashboard enrichi (priorités, résumés, compteurs) | **Fait** |
 | 5 | Suivi de décisions (scheduled function, tracker) | **Fait** |
-| 6 | Polish + tests internes JAXA | À faire |
+| 6 | Provisionnement services + tests internes JAXA | **Fait** |
+| 7 | Fix timeout + parallélisation Claude batches | **Fait** |
+| 8 | Pivot produit : assistant actif (briefing + brouillons + envoi) pour dirigeants QC | **Décidé** |
+| 9 | gmail.send + brouillons IA + briefing + profil auto (2000 emails) | **Fait** |
+| 10 | Audit complet + fix bloquants Phase A (OAuth, erreurs, timestamps) | **Fait** |
+| 10.5 | Fix logique d'affaire Phase B (persistance, scoring, heuristiques) | **Fait** |
+| 11 | **Stabilisation produit** : persistance brouillons, state navigation, filtrage dismissed/replied | **À faire** |
+| 12 | Test end-to-end complet (re-consent OAuth, envoi réel, mobile) | À faire |
+| 13 | Test interne JAXA + pilote Groupe Tonic | À faire |
+
+## Contexte global
+Voir ~/Documents/CONTEXT.md pour le profil complet,
+les conventions transversales et la liste des clients actifs.

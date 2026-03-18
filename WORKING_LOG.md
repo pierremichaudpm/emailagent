@@ -240,3 +240,367 @@
 - Pour tester : voir la checklist de provisionnement dans la Session 1
 - **Fichiers clés modifiés cette session** : Dashboard.jsx (réécrit), App.jsx (navigation 3 vues), Onboarding.jsx (refactoré), api.js (+3 wrappers)
 - **Nouveaux fichiers** : ConfigSteps.jsx, ConfigPanel.jsx, DecisionTracker.jsx, useAnalyses.js, useDecisions.js, decisions-list.js, decisions-check.js
+
+---
+
+## 2026-03-11 — Session 4 : Provisionnement services + premier test end-to-end
+
+### Accompli
+
+**Provisionnement Google Cloud Console (complet)**
+
+1. Projet `email-agent-jaxa` créé sur le compte `pierre@studiomicho.com`
+2. Gmail API activée
+3. OAuth consent screen configuré (app "Agent Courriel JAXA", email `virginiejaffredo@jaxa.ca`)
+4. Client OAuth `email-agent-dev` créé avec redirect URI `http://localhost:8888/.netlify/functions/auth-callback`
+5. Utilisateur test `virginiejaffredo@jaxa.ca` ajouté dans Audience
+
+**Provisionnement Supabase (complet)**
+
+1. Projet `jaxa email agent` créé (org `pierre@studiomicho.com`)
+2. Project ref : `dngtsjfmlbwklnthjjtb`
+3. Migration `001_initial.sql` exécutée — 4 tables créées
+4. Migration `002_analyze_fields.sql` exécutée — colonnes et contrainte ajoutées
+
+**Configuration locale + .env (complet)**
+
+1. `.env` créé avec toutes les clés (Google, Supabase, Anthropic, TOKEN_ENCRYPTION_KEY)
+2. `netlify-cli` installé, `netlify dev` fonctionnel sur `localhost:8888`
+
+**Factorisation getAccessToken (complet)**
+
+- `utils/auth.js` créé — logique centralisée de refresh token
+- `emails-sync.js`, `emails-analyze.js`, `decisions-check.js` mis à jour
+
+**Fix authenticate() (complet)**
+
+- `gmail.js` `authenticate()` réécrit avec `fetch()` natif au lieu de `googleapis` `client.getToken()` qui échouait dans Netlify Functions
+
+**Premier test end-to-end réussi**
+
+- OAuth Gmail → callback → tokens chiffrés dans Supabase ✅
+- Sync 20 emails → affichage dashboard ✅
+- Analyse IA : en cours de test (problème env var ANTHROPIC_API_KEY)
+
+**Nettoyage code**
+
+- `main.jsx` : suppression de `BrowserRouter` (inutilisé)
+- `netlify.toml` : ajout `framework = "#custom"`
+
+### Décisions techniques (Session 4)
+
+| Décision | Pourquoi |
+|----------|----------|
+| `fetch()` natif au lieu de `googleapis.getToken()` | googleapis échoue dans Netlify Functions — fetch natif fiable partout |
+| Suppression BrowserRouter | L'app navigue par state `view`, pas par URL |
+| `framework = "#custom"` dans netlify.toml | Force le mode custom dev au lieu de l'auto-détection |
+| getAccessToken() dans utils/auth.js | 3 functions dupliquaient la même logique de 30 lignes |
+
+### Problèmes rencontrés
+
+| Problème | Cause | Résolution |
+|----------|-------|------------|
+| `TypeError: fetch failed` sur auth-callback | URL Supabase incorrecte — `i` au lieu de `j` dans le project ref | Corrigé `.env` après diagnostic DNS (`ENOTFOUND`) |
+| `TypeError: fetch failed` initial | `googleapis` `client.getToken()` incompatible Netlify Functions | Réécrit avec `fetch()` natif |
+| ANTHROPIC_API_KEY requis | Netlify CLI a une variable système qui écrase le `.env` | À résoudre (unset env var Netlify ou renommer) |
+| Page blanche | `netlify dev` pas installé / pas lancé | Installation + lancement |
+| MIME type errors | Port 5173 occupé par ancien processus | Kill + relance propre |
+| Redirect URI avec espace | Copier-coller Google Cloud ajoutait un espace invisible | Retaper manuellement |
+
+### Prochaines étapes
+
+1. **Résoudre ANTHROPIC_API_KEY** pour tester l'analyse IA
+2. **Tester le bouton « Analyser »** end-to-end
+3. **Phase 7 — Polish UI** : dashboard visuellement basique, à améliorer pour démo client
+4. **Déployer sur Netlify** : env vars production, redirect URI production
+5. **Tests mobile** responsive
+
+### Contexte pour reprise
+
+- **Services provisionnés** : Google Cloud + Supabase + Anthropic — connectés et fonctionnels
+- **OAuth + sync emails** : testé et validé avec `virginiejaffredo@jaxa.ca`
+- **Serveur dev** : `cd ~/Documents/Jaxa/Agent\ email && npx netlify dev` (port 8888)
+- **Analyse IA** : pas encore testée (ANTHROPIC_API_KEY bloquée par Netlify CLI)
+- **UI à polir** : le client trouve le dashboard basique "underwhelming"
+
+---
+
+## 2026-03-11 — Session 5 : Fix timeout, parallélisation + remise en question produit
+
+### Accompli
+
+**Fix timeout analyse IA (complet)**
+
+1. Résolution ANTHROPIC_API_KEY : Netlify CLI injectait une valeur vide qui écrasait le `.env`. Solution : `unset ANTHROPIC_API_KEY` avant `npx netlify dev`
+2. Fix `kw.toLowerCase is not a function` dans `prioritize.js` : `keyword_flags` contient des objets `{level, keywords: [...]}`, pas des strings. Réécrit le matching pour itérer dans `group.keywords`
+3. Analyse IA testée et fonctionnelle : 3 emails analysés en ~10s ✅
+4. `emails-analyze.js` : batches de Claude lancés en **parallèle** via `Promise.all` au lieu de séquentiel. 4 batches × 5 emails = ~10s au lieu de ~40s. Résout le timeout 30s de Netlify Functions
+5. `useAnalyses.js` : simplifié — un seul appel API pour les 20 emails, plus de chunking frontend
+6. `BATCH_SIZE` réduit de 10 à 5 dans emails-analyze.js
+
+### Décisions techniques (Session 5)
+
+| Décision | Pourquoi |
+|----------|----------|
+| `Promise.all` pour les batches Claude | 4 batches parallèles ~10s vs 4 séquentiels ~40s — reste dans le timeout 30s |
+| BATCH_SIZE = 5 | 5 emails par appel Claude = ~10s. Sûr même en séquentiel, rapide en parallèle |
+| Suppression du chunking frontend | Un seul appel backend suffit maintenant — UX simplifiée |
+| `fetch()` natif partout | `googleapis` lib inutilisée — tout via fetch direct aux endpoints Google |
+
+### Problèmes rencontrés
+
+| Problème | Cause | Résolution |
+|----------|-------|------------|
+| ANTHROPIC_API_KEY requis | Netlify CLI injecte une variable vide depuis le compte lié | `unset ANTHROPIC_API_KEY` avant `npx netlify dev` |
+| `kw.toLowerCase is not a function` | `keyword_flags` = `[{level, keywords}]`, pas `[string]` | Réécrit le matching dans `prioritize.js` |
+| TimeoutError 30s | 20 emails × Claude séquentiel > 30s | Batches parallèles + batch size 5 |
+
+### Remise en question produit — CRITIQUE
+
+Le produit actuel est un **dashboard passif en lecture seule**. Constat :
+
+- L'utilisateur ne peut pas répondre, archiver, labelliser, ni même ouvrir ses emails directement
+- Il doit checker deux endroits (l'app + Gmail) — friction pure, zéro valeur nette
+- Les 5 phases de build ont peaufiné la fondation "lire" sans jamais aborder "agir"
+- Le marché a Superhuman, Spark, Shortwave, SaneBox, et Google Gemini dans Gmail — impossible de les battre en frontal
+
+**Pistes identifiées :**
+
+| Option | Description | Effort | Vendable? |
+|--------|-------------|--------|-----------|
+| A. App email complète | Lire + répondre + archiver, remplace Gmail | Très gros | Oui si niche |
+| B. Extension Chrome / Google Workspace Add-on | L'IA vit DANS Gmail, zéro friction | Moyen (pivot frontend) | Très vendable |
+| C. Inbox intelligente hybride | Gère les 5-10 critiques, renvoie vers Gmail pour le reste | Moyen | Correct |
+| D. Outil vertical spécialisé | Un seul problème pour un métier précis (avocats, courtiers, comptables) | Variable | Le plus différenciant |
+
+**Conclusion** : le backend (Claude analysis, scoring, decisions) est solide et réutilisable. Le problème est le frontend/UX et le positionnement produit.
+
+### Prochaines étapes — EN ATTENTE DE DÉCISION
+
+1. **Décider la direction produit** : option A, B, C ou D — change tout pour la suite
+2. **Identifier le client cible** et son problème spécifique avec les emails
+3. Selon la direction choisie :
+   - Option A : ajouter `gmail.send` + `gmail.modify`, reconstruire le frontend comme client email
+   - Option B : pivoter vers une Chrome extension / Google Workspace Add-on, réutiliser le backend
+   - Option C : ajouter liens directs Gmail + brouillons de réponse IA
+   - Option D : spécialiser le prompt Claude et l'UX pour un métier précis
+
+### Pivot produit — DÉCISION PRISE (2026-03-13)
+
+**Direction choisie : Assistant email actif pour dirigeants québécois, avec configuration sur mesure sur place.**
+
+Inspiration : article de Florent Daudens — agent IA qui lit les emails via MCP, trie en 3 niveaux (urgent/info/ignoré), rédige des brouillons de réponse. Résultat : 90 min/jour gagnées.
+
+**Positionnement produit :**
+- **Cible** : DG / dirigeants de PME québécoises (non-techniques)
+- **Valeur** : "Ouvrez l'app le matin, voyez vos 4 urgences, validez les réponses, fermez. 10 min au lieu de 90."
+- **Différenciation vs Superhuman/Spark/Shortwave** :
+  1. Francophone (français québécois natif, pas traduit)
+  2. Configuration sur mesure sur place (JAXA se déplace, comprend le métier du client, configure l'outil)
+  3. Support local et proximité (pas un SaaS américain anonyme)
+- **Interface** : webapp avec briefing du matin + brouillons de réponse IA + envoi après validation
+- **Modèle** : abonnement ~$29/mois + setup fee pour config sur place
+- **Coûts API** : ~$8-10/mois/utilisateur (Claude Sonnet, 50 emails/jour)
+- **Marge** : ~65%
+
+**Stratégie de validation :**
+1. JAXA = cobaye interne (tester le produit sur soi-même)
+2. Groupe Tonic = premier client pilote (essai gratuit, configuration sur place)
+
+**Ce qui change techniquement :**
+- Ajouter scope `gmail.send` + `gmail.compose` (brouillons + envoi)
+- Transformer le dashboard passif en assistant actif (briefing + brouillons + validation + envoi)
+- Le backend (analyse, scoring, décisions) reste identique
+- L'onboarding wizard existant = la base de la config sur mesure
+
+### Contexte pour reprise
+
+- **Backend fonctionnel** : OAuth ✅, sync ✅, analyse IA ✅ (parallélisée), scoring ✅, décisions ✅
+- **Pivot décidé** : assistant email actif pour dirigeants québécois, config sur mesure
+- **Prochaine session** : implémenter la v2 — briefing matin + brouillons de réponse + gmail.send
+
+---
+
+## 2026-03-17 — Session 6 : Phase 9 — Assistant actif + profil auto
+
+### Accompli
+
+**Gmail send + brouillons (complet)**
+
+1. `gmail.js` : ajout `createDraft()`, `sendDraft()`, `deleteDraft()`, `_buildRfc2822()` — construit des messages RFC 2822, crée/envoie/supprime des brouillons via Gmail API
+2. Scopes OAuth étendus : `gmail.send` + `gmail.compose` (nécessite re-consent)
+3. `draft-generate.js` : récupère le thread complet, génère un brouillon via Claude, le crée dans Gmail Drafts
+4. `draft-send.js` : envoie un brouillon, marque les décisions comme résolues
+5. `draft-update.js` : supprime l'ancien brouillon et recrée avec contenu modifié
+
+**Briefing — vue principale (complet)**
+
+1. `Briefing.jsx` : remplace le Dashboard comme vue par défaut
+   - 3 sections : Urgences (critical), À traiter (high), Information (normal+low)
+   - Bouton "Générer une réponse" → Claude rédige un brouillon inline
+   - Textarea éditable pour modifier le brouillon
+   - Boutons Envoyer / Modifier / Fermer
+   - Bouton Actualiser + Réanalyser dans le header
+2. `useBriefing.js` : hook qui combine analyse + gestion brouillons (generate, update, send, dismiss)
+3. `App.jsx` : navigation rewired — briefing par défaut, dashboard secondaire
+
+**Prompt de rédaction enrichi (complet)**
+
+1. `claude.js` `buildDraftSystemPrompt()` : injecte le contexte complet, les expéditeurs prioritaires, l'email de l'utilisateur pour le prénom/signature
+2. Adapte tutoiement/vouvoiement, signe avec le bon prénom
+3. Met `[À COMPLÉTER]` quand il manque des infos au lieu d'inventer
+4. Fallback : si Claude ne retourne pas de JSON, utilise la réponse brute comme corps du brouillon
+
+**Profil auto-généré (complet)**
+
+1. `profile-generate-background.js` : Background Function qui tourne jusqu'à 15 min
+   - Fetch 2000 emails metadata (from, to, subject, date, snippet) via Gmail API
+   - Analyse en batches de 200 avec Claude Sonnet (extracte contacts, projets, ton, signature)
+   - Fusionne les patterns en profil final de 300-500 mots
+   - Stocke le résultat dans `user_configs.context` + progression dans `profile_status`/`profile_progress`
+2. `profile-generate.js` : endpoint POST (lance le job) + GET (poll status)
+3. Frontend : bouton "Générer mon profil automatiquement" dans ConfigSteps avec polling toutes les 3s
+4. Migration `003_profile_fields.sql` : colonnes `profile_status` et `profile_progress`
+
+**Nettoyage et robustesse**
+
+1. `emails-analyze.js` : nettoyage des analyses orphelines (emails supprimés de Gmail)
+2. `emails-analyze.js` : paramètre `refresh=true` pour forcer la réanalyse complète
+3. `draft-generate.js` : vérifie que le dernier message n'est pas de l'utilisateur avant de générer
+4. `Briefing.jsx` : erreurs gracieuses — "Vous avez déjà répondu" et "Ce courriel n'est plus disponible" au lieu d'erreurs rouges
+
+### Décisions techniques (Session 6)
+
+| Décision | Pourquoi |
+|----------|----------|
+| Background Function pour le profil | Le fetch de 2000 emails + analyse Claude dépasse le timeout 30s des functions normales |
+| Polling depuis le frontend (3s) | La background function met à jour la progression dans Supabase, le frontend poll |
+| Sonnet pour tout (pas Opus) | Opus est trop lent pour le timeout — même en background, Sonnet suffit pour la synthèse |
+| Nettoyage orphelins dans emails-analyze | Les emails supprimés de Gmail restaient en DB et crashaient le brouillon |
+| Fallback texte brut si JSON invalide | Claude ne retourne pas toujours du JSON valide — on utilise sa réponse brute |
+
+### Problèmes rencontrés
+
+| Problème | Cause | Résolution |
+|----------|-------|------------|
+| ACCESS_TOKEN_SCOPE_INSUFFICIENT | Token existant n'a que gmail.readonly | Re-consent OAuth nécessaire après changement de scopes |
+| Brouillon signé "Michèle" | Claude inventait un prénom | Injecte l'email de l'utilisateur dans le prompt + extraction prénom |
+| Timeout profil auto (30s) | 500+ emails metadata + Claude analysis en une seule function | Background Function (15 min max) |
+| JSON parse error dans analyzeEmailPatterns | Claude retourne du JSON tronqué sur gros batches | Try/catch avec fallback texte brut |
+| "existing is not defined" après forceRefresh | Variable `existing` déclarée dans un bloc else, utilisée après | Remplacé par `existingIds.size > 0` |
+| "Requested entity was not found" | Thread supprimé/archivé de Gmail mais analyse en DB | Nettoyage orphelins + message gracieux |
+| Brouillon sur email déjà répondu | Le dernier message du thread était de l'utilisateur | Vérification sender avant génération |
+
+### État actuel — problèmes connus
+
+- **Taux d'échec élevé sur "Générer une réponse"** : threads manquants, derniers messages de l'utilisateur. Les erreurs sont maintenant gracieuses mais l'UX reste médiocre.
+- **L'outil n'est pas encore montrable à un client** — trop de cas d'erreur, pas assez de polish.
+- **Le profil auto fonctionne** mais prend 2-3 minutes pour 2000 emails.
+
+### Prochaines étapes
+
+1. **Polish UX critique** : ne pas afficher les emails dont le thread est inaccessible, cacher le bouton Générer quand c'est inutile
+2. **Tester end-to-end** un envoi réel de brouillon (re-consent OAuth nécessaire)
+3. **Améliorer la qualité des brouillons** — le profil auto aide mais le prompt peut être affiné
+4. **Déployer sur Netlify** pour tester en production (Background Functions ne marchent pas en dev local de la même façon)
+
+### Contexte pour reprise
+
+- **Phase 9 implémentée** : briefing + brouillons + envoi + profil auto
+- **Serveur dev** : `cd ~/Documents/Jaxa/Agent\ email && unset ANTHROPIC_API_KEY && npx netlify dev`
+- **Re-consent OAuth nécessaire** : les scopes ont changé, l'utilisateur doit se déconnecter/reconnecter
+- **Migration SQL exécutée** : `003_profile_fields.sql` (profile_status, profile_progress)
+- **Le produit a besoin de polish sérieux** avant d'être montrable
+
+---
+
+## 2026-03-18 — Session 7 : Audit complet + fix systématique
+
+### Accompli
+
+**Audit complet du projet (8 scénarios utilisateur, 12+ fichiers)**
+
+Audit exhaustif couvrant : ouverture app, génération brouillon, modification, envoi, ignorer, navigation, mobile, erreurs. 13 problèmes critiques/hauts identifiés.
+
+**Phase A — Fix bloquants (6 items, tous complétés)**
+
+1. A1: `refreshToken()` réécrit avec fetch natif — l'ancienne version via `googleapis` perdait les scopes OAuth après refresh, causant des 403 sur toutes les opérations d'écriture Gmail
+2. A2: Erreurs 403 Gmail affichent maintenant "Reconnectez-vous" au lieu d'un message technique
+3. A3: `draft-send.js` ne marque plus TOUTES les décisions résolues — filtre par `email_id`
+4. A4: Emails dismissed filtrés correctement même quand il n'y a pas de nouvelles analyses
+5. A5: Doublon du champ `labels` supprimé dans `normalizeMessage()`
+6. A6: Timestamps convertis en ISO 8601 pour Supabase (déjà fait session 6)
+
+**Phase B — Logique d'affaire (5 items, tous complétés)**
+
+1. B1: `user_replied` et `is_automatic` maintenant persistés dans `email_metadata` via upsert après les checks
+2. B2: `draft_id` persisté dans `email_metadata` quand un brouillon est créé — brouillons restaurés au rechargement avec status 'saved'
+3. B3: Heuristique `is_automatic` affinée — retirés les domaines ambigus (linkedin.com, google.com), gardé seulement les patterns clairement automatiques (noreply@, payments.interac.ca, etc.), labels Gmail réduits à CATEGORY_PROMOTIONS uniquement
+4. B4: Soft delete pour les orphelins — `dismissed=true` au lieu de `DELETE` pour préserver l'historique
+5. B5: Scoring capé à +4 max au-dessus du score IA pour éviter les faux positifs critiques
+
+**Phase C — UX (partiel)**
+
+1. C1/C3: Status 'saved' pour les brouillons persistés, affiche "Brouillon sauvegardé dans Gmail" + bouton "Regénérer"
+2. C4: Fix `useAnalyses` — `refresh` alias ajouté (Dashboard appelait `refresh` mais le hook retournait `analyze`)
+3. Bouton "Ignorer" (permanent, persiste en DB via `email-dismiss.js`)
+
+**Phase D — Nettoyage**
+
+1. D4: `react-router-dom` supprimé du projet (jamais utilisé, ~50KB bundle waste)
+
+**Migrations SQL créées**
+
+- `004_dismissed_field.sql` : `dismissed boolean DEFAULT false` sur `email_metadata`
+- `005_briefing_fields.sql` : `user_replied boolean`, `is_automatic boolean`, `draft_id text` sur `email_metadata`
+
+### Décisions techniques (Session 7)
+
+| Décision | Pourquoi |
+|----------|----------|
+| fetch natif pour refreshToken() | googleapis perdait les scopes après refresh → 403 sur toutes les opérations d'écriture |
+| Soft delete (dismissed=true) au lieu de hard delete | Préserve l'historique, évite de recréer des analyses pour des emails déjà traités |
+| Heuristique is_automatic réduite | linkedin.com et google.com filtraient des emails humains légitimes |
+| Scoring capé à +4 | Empêche un email normal (score IA=5) de devenir critique (10) par accumulation de bonus |
+| draft_id persisté en email_metadata | Permet de restaurer les brouillons entre sessions sans re-appeler Claude |
+| Pas de react-router-dom | L'app navigue par state local, la dépendance était inutile |
+
+### Problèmes identifiés — CRITIQUES (pas encore résolus)
+
+**3 problèmes qui rendent l'outil inutilisable pour un DG :**
+
+| # | Problème | Impact | Solution identifiée |
+|---|----------|--------|---------------------|
+| P1 | **Brouillons perdus au refresh/navigation** — body, subject, to pas en DB, seulement draft_id | DG perd 10 min de rédaction | Ajouter colonnes draft_body, draft_subject, draft_to en email_metadata + persister à la génération |
+| P2 | **Emails ignorés reviennent après refresh** — dismissed est en DB mais le state frontend n'est pas restauré | DG doit re-ignorer les mêmes emails | Initialiser dismissed Set depuis les analyses retournées par le backend |
+| P3 | **Email reste dans briefing après envoi** — draft-send ne marque pas email_metadata comme traité | DG ne sait pas si c'est envoyé ou pas | Ajouter user_sent_reply en email_metadata, mettre à jour après sendDraft |
+
+**13 problèmes hauts identifiés au total** — voir audit complet dans la session.
+
+### Prochaines étapes — PLAN DE STABILISATION
+
+**Phase 1 (Blockers absolus) — prochaine session :**
+1. Persistent draft storage : colonnes draft_body/subject/to + persister à la génération + restaurer au refresh
+2. Mark user_sent_reply après envoi dans email_metadata
+3. Restaurer dismissed Set depuis les analyses au refresh
+4. Meilleurs messages d'erreur (scope insufficient → "Reconnectez-vous")
+
+**Phase 2 (High priority) :**
+5. Filtrer user_replied dans le briefing (pas juste le calculer)
+6. Supprimer brouillons Gmail quand on ignore un email
+7. State global (React Context) pour préserver l'état entre navigations
+8. localStorage backup pour les modifications en cours
+
+**Phase 3 (Medium) :**
+9. Confirmation modale avant envoi
+10. Améliorations mobile (textarea auto-expand, boutons plus gros)
+11. Timeout/retry logic pour Claude API
+12. Re-consent OAuth + test envoi réel end-to-end
+
+### Contexte pour reprise
+
+- **Phases A+B terminées** : tous les fix bloquants et logique d'affaire appliqués
+- **Migrations SQL à exécuter** : `004_dismissed_field.sql` et `005_briefing_fields.sql`
+- **Re-consent OAuth toujours nécessaire** : scopes gmail.send/compose ajoutés mais pas encore re-autorisés
+- **Le produit est NON FONCTIONNEL pour un vrai utilisateur** — les brouillons se perdent, les emails ignorés reviennent, l'envoi ne marque pas l'email comme traité
+- **Plan de stabilisation en 3 phases** défini et priorisé — Phase 1 = blockers absolus

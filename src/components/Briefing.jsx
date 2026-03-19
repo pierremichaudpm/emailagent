@@ -866,7 +866,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
           {!showContextNote ? (
             <button
               onClick={() => setShowContextNote(true)}
-              className="text-sm text-gray-400 hover:text-brand-600 font-medium transition-colors flex items-center gap-1.5"
+              className="px-5 py-2.5 text-sm bg-brand-500 text-white rounded-xl font-semibold transition-colors flex items-center gap-2 hover:bg-brand-600 shadow-sm min-h-[44px]"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

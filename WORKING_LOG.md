@@ -604,3 +604,70 @@ Audit exhaustif couvrant : ouverture app, génération brouillon, modification, 
 - **Re-consent OAuth toujours nécessaire** : scopes gmail.send/compose ajoutés mais pas encore re-autorisés
 - **Le produit est NON FONCTIONNEL pour un vrai utilisateur** — les brouillons se perdent, les emails ignorés reviennent, l'envoi ne marque pas l'email comme traité
 - **Plan de stabilisation en 3 phases** défini et priorisé — Phase 1 = blockers absolus
+
+---
+
+## 2026-03-18 — Session 8 : Assistant actif, redesign, audit fixes
+
+### Accompli
+
+**Redesign complet de l'interface**
+
+1. Briefing : fond beige vintage (`bg-[#f5f0e8]`), typographie serif pour les titres, cards avec ombres douces, bordures colorées par priorité (rouge/ambre/gris)
+2. Login page : redesigné avec même palette beige
+3. ConfigPanel, Onboarding, DecisionTracker : harmonisés avec le design beige vintage
+4. Touch targets 44px minimum sur tous les boutons du Briefing (mobile-first)
+
+**Features ajoutées**
+
+1. **Thread complet** : chaque email montre le fil de discussion avec messages collapsibles, dernier message ouvert par défaut
+2. **Rédaction collaborative** : champ "Dites à l'IA quoi ajuster..." sous chaque brouillon + bouton "Ajuster" qui regénère avec instructions
+3. **Question du jour** : bloc en haut du briefing, une question d'amélioration continue par jour (expéditeur à prioriser, projet important, etc.)
+4. **Notes contextuelles** : "+ Ajouter une note" sur chaque email card + bouton note dans chaque message du thread
+5. **Ajout de contexte libre** : champ sous la question du jour pour ajouter du contexte temporaire
+6. **Légende** : explication du point violet (décision requise) et du check vert (envoyé)
+7. **Bouton "Ignorer"** permanent avec persistance en DB
+8. **Signature dans les brouillons** : Claude utilise la signature du profil auto-généré
+9. **Double-click prevention** sur "Envoyer" : state `sending` désactive le bouton après premier clic
+
+**Déploiement production**
+
+1. Variables d'environnement configurées dans Netlify
+2. Redirect URI production ajouté dans Google Cloud Console
+3. App déployée sur `https://jaxamail.netlify.app`
+4. OAuth fonctionnel en production ✅
+
+**Migrations SQL exécutées**
+
+- `003_profile_fields.sql` ✅
+- `004_dismissed_field.sql` ✅
+- `005_briefing_fields.sql` ✅
+
+### Décisions techniques (Session 8)
+
+| Décision | Pourquoi |
+|----------|----------|
+| Beige vintage (#f5f0e8) au lieu de gris | Chaleureux et premium, pas corporate froid — colle avec "assistant personnel" |
+| Thread collapsible avec dernier message ouvert | Le DG a besoin de lire le dernier message pour contextualiser sa réponse |
+| Question du jour au lieu de feedback par email | Moins intrusif, une seule interaction d'amélioration par session |
+| Rédaction collaborative par instruction | Le DG ne réécrit pas — il dit "plus court" ou "mentionne le budget" et l'IA ajuste |
+| Touch targets 44px | Standard Apple pour le tactile — le DG utilise son téléphone le matin |
+| Produit complémentaire, pas SaaS standalone | JAXA l'offre dans ses projets, pas en abonnement $29/mois |
+
+### Problèmes rencontrés
+
+| Problème | Cause | Résolution |
+|----------|-------|------------|
+| Erreur 400 Google en prod | Redirect URI de prod manquant dans Google Cloud Console | Ajouté `https://jaxamail.netlify.app/.netlify/functions/auth-callback` |
+| `.env` invisible dans le file manager | Fichier caché (commence par `.`) | Copié le contenu directement pour import Netlify |
+| Emails déjà répondus classés urgents | Le check `user_replied` ne filtrait pas dans le briefing | Filtré côté backend et frontend |
+| Brouillon signé "Michèle" | Prénom manquant dans le prompt Claude | Extraction depuis l'email utilisateur + profil |
+
+### Contexte pour reprise
+
+- **App en production** : `https://jaxamail.netlify.app` — OAuth + briefing fonctionnels
+- **Serveur dev** : `cd ~/Documents/Jaxa/Agent\ email && unset ANTHROPIC_API_KEY && npx netlify dev`
+- **Toutes les migrations SQL exécutées** (001-005)
+- **Le produit est fonctionnel** : briefing, analyse, brouillons, envoi, profil auto, thread complet
+- **Reste à tester** : rédaction collaborative, question du jour, notes contextuelles (codés mais pas testés en vrai)
+- **Reste à faire** : test mobile complet, test end-to-end envoi depuis prod

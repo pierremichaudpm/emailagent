@@ -29,6 +29,7 @@ function DraftPanel({ draft, emailId, onUpdate, onSend, onDismiss, onGenerate, o
   const [editBody, setEditBody] = useState(draft.body || '');
   const [confirmSend, setConfirmSend] = useState(false);
   const [refineInput, setRefineInput] = useState('');
+  const [sending, setSending] = useState(false);
 
   if (draft.status === 'generating') {
     return (
@@ -180,11 +181,11 @@ function DraftPanel({ draft, emailId, onUpdate, onSend, onDismiss, onGenerate, o
           <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
             <span className="text-sm text-amber-800 flex-1">Envoyer à <strong>{draft.to}</strong> ?</span>
             <button
-              onClick={() => { setConfirmSend(false); onSend(emailId); }}
-              disabled={draft.status === 'sending'}
-              className="px-5 py-2 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-semibold disabled:opacity-50 transition-colors"
+              onClick={async () => { setSending(true); setConfirmSend(false); try { await onSend(emailId); } finally { setSending(false); } }}
+              disabled={sending || draft.status === 'sending'}
+              className="px-5 py-2 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-semibold disabled:opacity-50 transition-colors min-h-[44px]"
             >
-              {draft.status === 'sending' ? 'Envoi...' : 'Confirmer'}
+              {sending || draft.status === 'sending' ? 'Envoi...' : 'Confirmer'}
             </button>
             <button
               onClick={() => setConfirmSend(false)}
@@ -197,13 +198,14 @@ function DraftPanel({ draft, emailId, onUpdate, onSend, onDismiss, onGenerate, o
           <div className="flex items-center gap-2">
             <button
               onClick={() => setConfirmSend(true)}
-              className="px-5 py-2.5 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-semibold transition-colors"
+              disabled={sending}
+              className="px-5 py-2.5 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-semibold transition-colors min-h-[44px] disabled:opacity-50"
             >
               Envoyer
             </button>
             <button
               onClick={() => { setEditBody(draft.body); setEditing(true); }}
-              className="px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors"
+              className="px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors min-h-[44px]"
             >
               Modifier
             </button>
@@ -541,14 +543,14 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
               {showReplyButton && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onGenerate(analysis.email_id); }}
-                  className="px-5 py-2.5 text-sm bg-brand-500 text-white rounded-xl hover:bg-brand-600 font-semibold transition-colors shadow-sm"
+                  className="px-5 py-2.5 text-sm bg-brand-500 text-white rounded-xl hover:bg-brand-600 font-semibold transition-colors shadow-sm min-h-[44px]"
                 >
                   Générer une réponse
                 </button>
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); onDismissEmail(analysis.email_id); }}
-                className="px-4 py-2.5 text-sm text-gray-400 hover:text-gray-600 font-medium transition-colors"
+                className="px-4 py-2.5 text-sm text-gray-400 hover:text-gray-600 font-medium transition-colors min-h-[44px]"
               >
                 Ignorer
               </button>
@@ -667,7 +669,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
             <button
               onClick={() => refresh(false)}
               disabled={loading}
-              className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+              className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50 min-h-[44px] min-w-[44px]"
               title="Actualiser"
             >
               <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -677,7 +679,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
             {onOpenConfig && (
               <button
                 onClick={onOpenConfig}
-                className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors min-h-[44px] min-w-[44px]"
                 title="Configuration"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -688,7 +690,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
             )}
             <button
               onClick={onDisconnect}
-              className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+              className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors min-h-[44px] min-w-[44px]"
               title="Déconnecter"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

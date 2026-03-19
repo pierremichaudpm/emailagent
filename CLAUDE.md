@@ -107,18 +107,23 @@ Niveaux de priorité : critical (9-10), high (7-8), normal (4-6), low (1-3)
 App.jsx (state: view)
   ├── login screen (si pas de compte)
   ├── Onboarding wizard (si pas de config)
-  ├── Dashboard (vue par défaut)
-  │   ├── bouton « Analyser » → appel emails-analyze
-  │   ├── icône clipboard → DecisionTracker
-  │   └── icône engrenage → ConfigPanel
-  ├── ConfigPanel (édition config en 4 onglets)
+  ├── Briefing (vue par défaut)
+  │   ├── Question du jour (amélioration continue)
+  │   ├── 3 sections : Urgences / À traiter / Information
+  │   ├── Thread complet (collapsible) + brouillons IA + envoi
+  │   ├── Rédaction collaborative (ajuster le brouillon par instruction)
+  │   ├── Notes contextuelles sur chaque message
+  │   ├── icône engrenage → ConfigPanel
+  │   └── icône clipboard → DecisionTracker
+  ├── Dashboard (vue legacy, stats)
+  ├── ConfigPanel (édition config en 4 onglets + profil auto)
   └── DecisionTracker (en attente / résolues + vérification)
 ```
 
 ### Sécurité — non négociable
 
 - OAuth 2.0 uniquement, jamais de mots de passe email
-- Lecture seule : `gmail.readonly` (Gmail), `Mail.Read` (Outlook futur)
+- Scopes Gmail : `gmail.readonly` + `gmail.send` + `gmail.compose`
 - Tokens chiffrés AES-256-GCM dans Supabase (`TOKEN_ENCRYPTION_KEY` = 64 hex chars)
 - Format chiffré : `iv:authTag:ciphertext` (tout en hex)
 - Zéro rétention du corps des courriels — on stocke résumés et métadonnées seulement

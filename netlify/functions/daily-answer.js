@@ -33,12 +33,24 @@ export default async (req) => {
 
     if (type === 'sender_priority' && sender_email) {
       const priorities = config.sender_priorities || {};
-      if (answer === 'priority') {
-        priorities[sender_email] = { level: 'high', label: sender_email.split('@')[0] };
-      } else if (answer === 'critical') {
-        priorities[sender_email] = { level: 'critical', label: sender_email.split('@')[0] };
+      if (answer === 'downgrade') {
+        // Déclasser : si critical → high, si high → supprimer
+        const current = priorities[sender_email];
+        if (current && current.level === 'critical') {
+          priorities[sender_email] = { ...current, level: 'high' };
+        } else {
+          delete priorities[sender_email];
+        }
+      } else if (answer === 'upgrade') {
+        // Remonter : si absent → high, si high → critical
+        const current = priorities[sender_email];
+        if (current && current.level === 'high') {
+          priorities[sender_email] = { ...current, level: 'critical' };
+        } else {
+          priorities[sender_email] = { level: 'high', label: sender_email.split('@')[0] };
+        }
       }
-      // 'ignore' → on ne l'ajoute pas, rien à faire
+      // 'keep' → rien à changer, le classement est bon
       updates.sender_priorities = priorities;
     }
 

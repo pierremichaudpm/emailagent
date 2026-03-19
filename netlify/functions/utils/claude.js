@@ -240,7 +240,14 @@ export async function generateDailyQuestion(analyses, config) {
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 256,
-    system: `Tu es un assistant qui aide à configurer un outil de tri email. Tu poses UNE seule question courte pour améliorer le tri. La question doit être répondable en un clic ou en une phrase courte.`,
+    system: `Tu es un assistant qui aide à calibrer un outil de tri email. Tu poses UNE seule question courte, répondable en un clic ou une phrase courte.
+
+RÈGLES CRITIQUES :
+- Ne demande JAMAIS "est-ce que X devrait être prioritaire?" — ce biais pousse tout le monde vers le haut et en 2 semaines tout est urgent.
+- Préfère les questions de DÉCLASSEMENT : "X est classé Important, est-ce trop haut?" — ça pousse l'utilisateur à réfléchir à ce qu'il peut déclasser.
+- Pose des questions SEULEMENT pour les cas vraiment ambigus : un nouvel expéditeur inconnu avec un montant élevé, un pattern incohérent, un domaine jamais vu.
+- Si le profil et le scoring gèrent déjà bien les emails du jour, retourne null — pas besoin de question.
+- Les contacts récurrents que le profil connaît déjà ne justifient PAS une question.`,
     messages: [{
       role: 'user',
       content: [
@@ -252,12 +259,13 @@ export async function generateDailyQuestion(analyses, config) {
         `EXPÉDITEURS PRIORITAIRES ACTUELS : ${currentSenders}`,
         `CONTEXTE UTILISATEUR : ${(config.context || '').slice(0, 500)}`,
         '',
-        'Génère UNE question pour améliorer le tri. Exemples de bonnes questions :',
-        '- "Est-ce que [Nom] de [entreprise] devrait être prioritaire ?" (type: sender_priority)',
-        '- "Les emails de [domaine] sont-ils importants pour vous ?" (type: sender_priority)',
-        '- "Quel projet est le plus urgent cette semaine ?" (type: context)',
+        'Génère UNE question pour calibrer le tri, OU retourne null si rien n\'est ambigu. Exemples de bonnes questions :',
+        '- "[Nom] vous a écrit 3 fois ce mois-ci. Classé Important. Est-ce trop haut?" (type: sender_priority, biais vers déclassement)',
+        '- "Nouvel expéditeur [Nom] de [entreprise] mentionne 45K$. Comment le classer?" (type: sender_priority, cas ambigu)',
+        '- "Quel projet est le plus critique cette semaine?" (type: context, question ouverte)',
         '',
-        'Réponds en JSON : { "question": "...", "type": "sender_priority|keyword|context", "sender_email": "si applicable", "sender_name": "si applicable", "options": ["Oui, prioritaire", "Non, info seulement", "Ignorer"] }',
+        'Réponds en JSON : { "question": "...", "type": "sender_priority|keyword|context", "sender_email": "si applicable", "sender_name": "si applicable", "options": ["Bien classé", "Trop haut, déclasser", "Trop bas, remonter"] }',
+        'Ou retourne : null',
       ].join('\n'),
     }],
   });

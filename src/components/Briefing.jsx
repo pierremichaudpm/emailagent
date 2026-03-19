@@ -1,6 +1,59 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBriefing } from '../hooks/useBriefing';
 import { getDailyQuestion, answerDailyQuestion, getEmailThread } from '../lib/api';
+
+function useVoiceInput(onResult) {
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
+
+  const startListening = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'fr-CA';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      onResult(transcript);
+      setListening(false);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }, [onResult]);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) recognitionRef.current.stop();
+    setListening(false);
+  }, []);
+
+  const supported = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  return { listening, startListening, stopListening, supported };
+}
+
+function MicButton({ onResult, className = '' }) {
+  const { listening, startListening, stopListening, supported } = useVoiceInput(onResult);
+  if (!supported) return null;
+  return (
+    <button
+      type="button"
+      onClick={listening ? stopListening : startListening}
+      className={`p-2 rounded-xl transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${listening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-gray-400 hover:text-brand-600 hover:bg-brand-50'} ${className}`}
+      title={listening ? 'Arrêter' : 'Dicter'}
+    >
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-14 0m7 7v4m-4 0h8M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
+      </svg>
+    </button>
+  );
+}
 
 function formatDate() {
   const d = new Date();
@@ -441,7 +494,7 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                Ajouter une note au contexte
+                Contexte
               </button>
             )}
             {showNote && (
@@ -460,10 +513,14 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
                       setNote('');
                     }
                   }}
-                  placeholder="Ex: Toujours prioriser, projet en pause, relancer..."
-                  className="flex-1 px-3 py-1.5 text-xs border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  placeholder="Dicter ou taper une note..."
+                  className="flex-1 px-3 py-1.5 text-xs border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[36px]"
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
+                />
+                <MicButton
+                  onResult={(text) => setNote((prev) => prev ? prev + ' ' + text : text)}
+                  className="!p-1.5 !min-h-[36px] !min-w-[36px]"
                 />
                 <button
                   onClick={(e) => {
@@ -766,8 +823,8 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
                 </div>
               ) : (
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {(dailyQ.options || ['Oui, prioritaire', 'Non, info seulement', 'Ignorer']).map((opt, i) => {
-                    const answers = ['critical', 'priority', 'ignore'];
+                  {(dailyQ.options || ['Bien classé', 'Trop haut, déclasser', 'Trop bas, remonter']).map((opt, i) => {
+                    const answers = ['keep', 'downgrade', 'upgrade'];
                     return (
                       <button
                         key={i}
@@ -812,9 +869,9 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
               className="text-sm text-gray-400 hover:text-brand-600 font-medium transition-colors flex items-center gap-1.5"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Ajouter du contexte pour aujourd'hui
+              Contexte
             </button>
           ) : (
             <div className="bg-white rounded-2xl border border-stone-200/80 shadow-sm p-4">
@@ -826,13 +883,18 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
                   </svg>
                 </button>
               </div>
-              <textarea
-                value={contextNote}
-                onChange={(e) => setContextNote(e.target.value)}
-                placeholder="Ex: Cette semaine je suis en deadline sur SILA. Je suis en vacances du 20 au 27. Le projet BBR est en pause..."
-                className="w-full min-h-[80px] p-3 text-sm border border-stone-200 rounded-xl resize-y focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder-gray-400 leading-relaxed"
-                autoFocus
-              />
+              <div className="relative">
+                <textarea
+                  value={contextNote}
+                  onChange={(e) => setContextNote(e.target.value)}
+                  placeholder="Ex: Dépôt SODEC cette semaine, ne rien confirmer sur BBR, j'attends les documents de William..."
+                  className="w-full min-h-[80px] p-3 pr-14 text-sm border border-stone-200 rounded-xl resize-y focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder-gray-400 leading-relaxed"
+                  autoFocus
+                />
+                <div className="absolute top-2 right-2">
+                  <MicButton onResult={(text) => setContextNote((prev) => prev ? prev + ' ' + text : text)} />
+                </div>
+              </div>
               <div className="flex items-center gap-2 mt-3">
                 <button
                   onClick={async () => {

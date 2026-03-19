@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="108" fill="#8B7355"/>
+  <rect x="24" y="24" width="464" height="464" rx="90" fill="#f5f0e8"/>
+  <g transform="translate(256,256)">
+    <!-- Envelope body -->
+    <rect x="-140" y="-90" width="280" height="180" rx="20" fill="#8B7355" opacity="0.15"/>
+    <rect x="-140" y="-90" width="280" height="180" rx="20" fill="none" stroke="#8B7355" stroke-width="8"/>
+    <!-- Envelope flap -->
+    <path d="M-140-70 L0 40 L140-70" fill="none" stroke="#8B7355" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- AI sparkle -->
+    <circle cx="100" cy="-60" r="28" fill="#8B7355"/>
+    <path d="M100-72 L100-48 M88-60 L112-60 M92-68 L108-52 M108-68 L92-52" stroke="#f5f0e8" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>

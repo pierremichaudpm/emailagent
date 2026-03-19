@@ -176,7 +176,7 @@ export default function Onboarding({ account, onComplete }) {
                     <div className="bg-brand-500 h-2 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
                   </div>
                   <p className="text-sm text-brand-600 font-medium">{genStatus}</p>
-                  <p className="text-xs text-gray-400">Cela prend 2-3 minutes. Vous pouvez rester sur cette page.</p>
+                  <p className="text-xs text-gray-400">Cela prend 2-3 minutes. Vous pourrez modifier le contexte recueilli après coup.</p>
                 </div>
               );
             })()}

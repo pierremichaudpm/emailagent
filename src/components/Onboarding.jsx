@@ -159,15 +159,27 @@ export default function Onboarding({ account, onComplete }) {
               </button>
             )}
 
-            {generating && (
-              <div className="space-y-4">
-                <div className="w-full bg-stone-100 rounded-full h-2">
-                  <div className="bg-brand-500 h-2 rounded-full animate-pulse" style={{ width: '60%' }} />
+            {generating && (() => {
+              // Parse progress from genStatus like "Analyse IA... (batch 3/12, 1319 courriels)"
+              let pct = 5;
+              const batchMatch = genStatus.match(/batch\s+(\d+)\s*\/\s*(\d+)/i);
+              if (batchMatch) {
+                pct = Math.min(95, Math.round((parseInt(batchMatch[1]) / parseInt(batchMatch[2])) * 100));
+              } else if (genStatus.toLowerCase().includes('fetch') || genStatus.toLowerCase().includes('récup')) {
+                pct = 10;
+              } else if (genStatus.toLowerCase().includes('fusion') || genStatus.toLowerCase().includes('merge')) {
+                pct = 90;
+              }
+              return (
+                <div className="space-y-4">
+                  <div className="w-full bg-stone-100 rounded-full h-2">
+                    <div className="bg-brand-500 h-2 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                  </div>
+                  <p className="text-sm text-brand-600 font-medium">{genStatus}</p>
+                  <p className="text-xs text-gray-400">Cela prend 2-3 minutes. Vous pouvez rester sur cette page.</p>
                 </div>
-                <p className="text-sm text-brand-600 font-medium">{genStatus}</p>
-                <p className="text-xs text-gray-400">Cela prend 2-3 minutes. Vous pouvez rester sur cette page.</p>
-              </div>
-            )}
+              );
+            })()}
 
             {profileReady && (
               <div className="space-y-4">

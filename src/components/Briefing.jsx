@@ -12,13 +12,17 @@ function useVoiceInput(onResult) {
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'fr-CA';
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      onResult(transcript);
-      setListening(false);
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          transcript += event.results[i][0].transcript + ' ';
+        }
+      }
+      if (transcript.trim()) onResult(transcript.trim());
     };
     recognition.onerror = () => setListening(false);
     recognition.onend = () => setListening(false);

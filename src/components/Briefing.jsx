@@ -2,7 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBriefing } from '../hooks/useBriefing';
 import { useCalendar } from '../hooks/useCalendar';
 import CalendarWidget from './CalendarWidget';
-import { getDailyQuestion, answerDailyQuestion, getEmailThread } from '../lib/api';
+import { getDailyQuestion, answerDailyQuestion, getEmailThread, createCalendarEvent } from '../lib/api';
+
+const DATE_PATTERN_FR = /\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|après-demain|la semaine prochaine|le \d{1,2})\b/i;
+
+function detectDateInText(text) {
+  if (!text) return null;
+  const match = text.match(DATE_PATTERN_FR);
+  return match ? match[0] : null;
+}
 
 function useVoiceInput(onResult) {
   const [listening, setListening] = useState(false);
@@ -434,6 +442,11 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
   const [showNote, setShowNote] = useState(false);
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
+  const [detectedDate, setDetectedDate] = useState(null);
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [eventForm, setEventForm] = useState({ summary: '', date: '', startTime: '09:00', endTime: '10:00' });
+  const [eventCreating, setEventCreating] = useState(false);
+  const [eventCreated, setEventCreated] = useState(false);
   const hasDraft = draft && draft.status !== 'idle';
   const isSent = draft?.status === 'sent';
 
@@ -553,11 +566,16 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
                   onChange={(e) => setNote(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && note.trim()) {
+                      const detected = detectDateInText(note);
                       answerDailyQuestion(account.email, 'context', 'add', null,
                         `${analysis.sender_name || analysis.sender_email} (${analysis.subject}) : ${note.trim()}`
                       ).catch(() => {});
                       setShowNote(false);
                       setNoteSaved(true);
+                      if (detected) {
+                        setDetectedDate(detected);
+                        setEventForm((f) => ({ ...f, summary: `${analysis.subject} - ${analysis.sender_name || analysis.sender_email}` }));
+                      }
                       setNote('');
                     }
                   }}
@@ -574,11 +592,16 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
                   onClick={(e) => {
                     e.stopPropagation();
                     if (note.trim()) {
+                      const detected = detectDateInText(note);
                       answerDailyQuestion(account.email, 'context', 'add', null,
                         `${analysis.sender_name || analysis.sender_email} (${analysis.subject}) : ${note.trim()}`
                       ).catch(() => {});
                       setShowNote(false);
                       setNoteSaved(true);
+                      if (detected) {
+                        setDetectedDate(detected);
+                        setEventForm((f) => ({ ...f, summary: `${analysis.subject} - ${analysis.sender_name || analysis.sender_email}` }));
+                      }
                       setNote('');
                     }
                   }}
@@ -598,7 +621,87 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
               </div>
             )}
             {noteSaved && (
-              <span className="text-xs text-emerald-600 font-medium">Note ajoutée au contexte</span>
+              <div className="space-y-2">
+                <span className="text-xs text-emerald-600 font-medium">Note ajoutée au contexte</span>
+                {detectedDate && !showEventForm && !eventCreated && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowEventForm(true); }}
+                    className="flex items-center gap-1.5 text-xs text-[#5c4a3a] bg-[#f5f0e8] border border-[#e0d5c5] px-3 py-1.5 rounded-lg font-medium hover:bg-[#ede5d8] transition-colors min-h-[36px]"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Créer un rappel ({detectedDate}) ?
+                  </button>
+                )}
+                {showEventForm && !eventCreated && (
+                  <div className="p-3 bg-[#f5f0e8] rounded-xl border border-[#e0d5c5] space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      value={eventForm.summary}
+                      onChange={(e) => setEventForm((f) => ({ ...f, summary: e.target.value }))}
+                      placeholder="Titre"
+                      className="w-full px-3 py-1.5 text-xs border border-[#e0d5c5] rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        value={eventForm.date}
+                        onChange={(e) => setEventForm((f) => ({ ...f, date: e.target.value }))}
+                        className="flex-1 px-3 py-1.5 text-xs border border-[#e0d5c5] rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                      />
+                      <input
+                        type="time"
+                        value={eventForm.startTime}
+                        onChange={(e) => setEventForm((f) => ({ ...f, startTime: e.target.value }))}
+                        className="w-20 px-2 py-1.5 text-xs border border-[#e0d5c5] rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                      />
+                      <input
+                        type="time"
+                        value={eventForm.endTime}
+                        onChange={(e) => setEventForm((f) => ({ ...f, endTime: e.target.value }))}
+                        className="w-20 px-2 py-1.5 text-xs border border-[#e0d5c5] rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!eventForm.summary || !eventForm.date) return;
+                          setEventCreating(true);
+                          try {
+                            await createCalendarEvent(account.email, account.provider || 'gmail', {
+                              summary: eventForm.summary,
+                              start: `${eventForm.date}T${eventForm.startTime}:00`,
+                              end: `${eventForm.date}T${eventForm.endTime}:00`,
+                            });
+                            setEventCreated(true);
+                            setShowEventForm(false);
+                          } catch {} finally { setEventCreating(false); }
+                        }}
+                        disabled={!eventForm.summary || !eventForm.date || eventCreating}
+                        className="px-3 py-1.5 text-xs bg-[#5c4a3a] text-white rounded-lg font-medium disabled:opacity-40 min-h-[36px]"
+                      >
+                        {eventCreating ? 'Création...' : 'Créer'}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShowEventForm(false); }}
+                        className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {eventCreated && (
+                  <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Événement créé
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
@@ -729,7 +832,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
     dismissEmail: onDismissEmail,
   } = useBriefing(account);
 
-  const { grouped: calendarGrouped, loading: calendarLoading, error: calendarError } = useCalendar(account);
+  const { grouped: calendarGrouped, loading: calendarLoading, error: calendarError, refresh: calendarRefresh } = useCalendar(account);
 
   const [dailyQ, setDailyQ] = useState(null);
   const [dailyAnswered, setDailyAnswered] = useState(false);
@@ -847,7 +950,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
       </header>
 
       {/* Calendar widget */}
-      <CalendarWidget grouped={calendarGrouped} loading={calendarLoading} error={calendarError} />
+      <CalendarWidget grouped={calendarGrouped} loading={calendarLoading} error={calendarError} account={account} onRefresh={calendarRefresh} />
 
       {/* Daily improvement question */}
       {dailyQ && !dailyAnswered && !loading && (
@@ -875,6 +978,22 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
                   >
                     OK
                   </button>
+                </div>
+              ) : dailyQ.type === 'calendar_insight' ? (
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {(dailyQ.options || ['Oui, envoyer', 'Non merci', 'Rappeler plus tard']).map((opt, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleDailyAnswer(opt)}
+                      className={`px-3 py-1.5 text-sm rounded-xl font-medium transition-colors min-h-[44px] ${
+                        i === 0
+                          ? 'bg-[#5c4a3a] text-white hover:bg-[#4a3a2e]'
+                          : 'bg-[#f5f0e8] text-[#5c4a3a] border border-[#e0d5c5] hover:bg-[#ede5d8]'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
                 </div>
               ) : (
                 <div className="mt-3 flex items-center gap-2 flex-wrap">

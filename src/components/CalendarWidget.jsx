@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createCalendarEvent } from '../lib/api';
 
 function formatTime(event) {
   if (event.isAllDay) return 'Journée';
@@ -53,8 +54,82 @@ function EventRow({ event }) {
   );
 }
 
-export default function CalendarWidget({ grouped, loading, error }) {
+function QuickCreateForm({ account, onCreated, onCancel }) {
+  const [form, setForm] = useState({ summary: '', date: '', startTime: '09:00', endTime: '10:00' });
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleCreate = async () => {
+    if (!form.summary || !form.date) return;
+    setCreating(true);
+    setError(null);
+    try {
+      await createCalendarEvent(account.email, account.provider || 'gmail', {
+        summary: form.summary,
+        start: `${form.date}T${form.startTime}:00`,
+        end: `${form.date}T${form.endTime}:00`,
+      });
+      onCreated();
+    } catch (err) {
+      setError(err.message || 'Erreur lors de la création');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-[#e8e0d4] space-y-2">
+      <input
+        type="text"
+        value={form.summary}
+        onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
+        placeholder="Titre de l'événement"
+        className="w-full px-3 py-2 text-sm border border-[#e0d5c5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355] bg-white min-h-[44px]"
+        autoFocus
+      />
+      <div className="flex gap-2">
+        <input
+          type="date"
+          value={form.date}
+          onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+          className="flex-1 px-3 py-2 text-sm border border-[#e0d5c5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355] bg-white min-h-[44px]"
+        />
+        <input
+          type="time"
+          value={form.startTime}
+          onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
+          className="w-24 px-2 py-2 text-sm border border-[#e0d5c5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355] bg-white min-h-[44px]"
+        />
+        <input
+          type="time"
+          value={form.endTime}
+          onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
+          className="w-24 px-2 py-2 text-sm border border-[#e0d5c5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355] bg-white min-h-[44px]"
+        />
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          onClick={handleCreate}
+          disabled={!form.summary || !form.date || creating}
+          className="px-4 py-2 text-sm bg-[#5c4a3a] text-white rounded-xl font-semibold hover:bg-[#4a3a2e] disabled:opacity-40 transition-colors min-h-[44px]"
+        >
+          {creating ? 'Création...' : 'Créer'}
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm text-[#8b7355] hover:text-[#5c4a3a] font-medium min-h-[44px]"
+        >
+          Annuler
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function CalendarWidget({ grouped, loading, error, account, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   // Graceful fallback on error or no data
   if (error) {
@@ -75,10 +150,30 @@ export default function CalendarWidget({ grouped, loading, error }) {
   if (!grouped || grouped.length === 0) {
     return (
       <div className="mx-4 sm:mx-6 mb-4 p-4 bg-[#f5f0e8] rounded-2xl border border-[#e8e0d4]">
-        <div className="flex items-center gap-2">
-          <span className="text-base">📅</span>
-          <span className="text-sm text-[#8b7355] font-medium">Aucun événement à venir</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📅</span>
+            <span className="text-sm text-[#8b7355] font-medium">Aucun événement à venir</span>
+          </div>
+          {account && (
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8b7355] hover:bg-[#ede5d8] hover:text-[#5c4a3a] transition-colors min-h-[44px] min-w-[44px]"
+              title="Ajouter un événement"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
         </div>
+        {showCreate && account && (
+          <QuickCreateForm
+            account={account}
+            onCreated={() => { setShowCreate(false); if (onRefresh) onRefresh(); }}
+            onCancel={() => setShowCreate(false)}
+          />
+        )}
       </div>
     );
   }
@@ -97,6 +192,17 @@ export default function CalendarWidget({ grouped, loading, error }) {
             {formatDayLabel(todayGroup.date)} — {todayCount} événement{todayCount > 1 ? 's' : ''}
           </h3>
         </div>
+        {account && (
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8b7355] hover:bg-[#ede5d8] hover:text-[#5c4a3a] transition-colors min-h-[44px] min-w-[44px]"
+            title="Ajouter un événement"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Today events */}
@@ -133,6 +239,15 @@ export default function CalendarWidget({ grouped, loading, error }) {
             </svg>
           </button>
         </>
+      )}
+
+      {/* Quick create form */}
+      {showCreate && account && (
+        <QuickCreateForm
+          account={account}
+          onCreated={() => { setShowCreate(false); if (onRefresh) onRefresh(); }}
+          onCancel={() => setShowCreate(false)}
+        />
       )}
     </div>
   );

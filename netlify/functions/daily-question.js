@@ -1,10 +1,13 @@
 import { getSupabase } from './utils/supabase.js';
-import { generateDailyQuestion } from './utils/claude.js';
+import { generateDailyQuestion, buildCalendarContext } from './utils/claude.js';
+import { getAccessToken } from './utils/auth.js';
+import { listEvents } from './services/google-calendar.js';
 
 export default async (req) => {
   try {
     const url = new URL(req.url);
     const email = url.searchParams.get('email');
+    const providerName = url.searchParams.get('provider') || 'gmail';
 
     if (!email) {
       return new Response(JSON.stringify({ error: 'Paramètre email requis' }), {
@@ -14,7 +17,7 @@ export default async (req) => {
 
     const supabase = getSupabase();
 
-    const [configResult, analysesResult] = await Promise.all([
+    const [configResult, analysesResult, accountResult] = await Promise.all([
       supabase.from('user_configs').select('*').eq('user_id', email).single(),
       supabase.from('email_metadata')
         .select('sender_name, sender_email, subject, priority_level, priority_score')
@@ -22,6 +25,7 @@ export default async (req) => {
         .eq('dismissed', false)
         .order('analyzed_at', { ascending: false })
         .limit(20),
+      supabase.from('accounts').select('*').eq('email', email).eq('provider', providerName).single(),
     ]);
 
     const config = configResult.data || {};
@@ -33,7 +37,23 @@ export default async (req) => {
       });
     }
 
-    const question = await generateDailyQuestion(analyses, config);
+    // Fetch calendar events for cross-referencing
+    let calendarContext = '';
+    let calendarEvents = [];
+    if (accountResult.data) {
+      try {
+        const accessToken = await getAccessToken(accountResult.data);
+        const now = new Date();
+        const timeMin = now.toISOString();
+        const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        calendarEvents = await listEvents(accessToken, { timeMin, timeMax, timeZone: 'America/Montreal' });
+        calendarContext = buildCalendarContext(calendarEvents);
+      } catch (err) {
+        console.warn('Calendar fetch for daily question failed (continuing without):', err.message);
+      }
+    }
+
+    const question = await generateDailyQuestion(analyses, config, calendarContext, calendarEvents);
 
     return new Response(JSON.stringify({ question }), {
       headers: { 'Content-Type': 'application/json' },

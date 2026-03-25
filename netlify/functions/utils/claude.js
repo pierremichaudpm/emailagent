@@ -253,7 +253,7 @@ export async function refineDraftReply(currentDraft, instruction, thread, config
  * Génère une question d'amélioration quotidienne basée sur les analyses du jour.
  * Retourne { question, type, options, context }.
  */
-export async function generateDailyQuestion(analyses, config) {
+export async function generateDailyQuestion(analyses, config, calendarContext, events) {
   const anthropic = getClient();
 
   const emailSummary = analyses.slice(0, 15).map((a) => (
@@ -263,6 +263,28 @@ export async function generateDailyQuestion(analyses, config) {
   const currentSenders = config.sender_priorities
     ? Object.keys(config.sender_priorities).join(', ')
     : 'aucun';
+
+  // Build calendar insight block
+  let calendarBlock = '';
+  if (calendarContext) {
+    calendarBlock = '\n\nAGENDA DE LA SEMAINE :\n' + calendarContext;
+  }
+
+  // Extract attendees from events for cross-referencing with email senders
+  let meetingContacts = '';
+  if (events && events.length > 0) {
+    const attendeeEmails = new Set();
+    for (const evt of events) {
+      if (evt.attendees) {
+        for (const a of evt.attendees) {
+          if (a.email) attendeeEmails.add(a.email.toLowerCase());
+        }
+      }
+    }
+    if (attendeeEmails.size > 0) {
+      meetingContacts = '\nCONTACTS AVEC MEETINGS PRÉVUS : ' + [...attendeeEmails].join(', ');
+    }
+  }
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -274,24 +296,37 @@ RÈGLES CRITIQUES :
 - Préfère les questions de DÉCLASSEMENT : "X est classé Important, est-ce trop haut?" — ça pousse l'utilisateur à réfléchir à ce qu'il peut déclasser.
 - Pose des questions SEULEMENT pour les cas vraiment ambigus : un nouvel expéditeur inconnu avec un montant élevé, un pattern incohérent, un domaine jamais vu.
 - Si le profil et le scoring gèrent déjà bien les emails du jour, retourne null — pas besoin de question.
-- Les contacts récurrents que le profil connaît déjà ne justifient PAS une question.`,
+- Les contacts récurrents que le profil connaît déjà ne justifient PAS une question.
+
+QUESTIONS CALENDRIER (type: calendar_insight) :
+- Si un contact a un meeting prévu mais aucun échange email récent, propose de préparer un message.
+- Si 3+ réunions sont consécutives (moins de 30 min entre chaque), propose de bloquer du temps tampon.
+- Si un contact fréquent dans les emails n'a aucun événement prévu cette semaine, signale-le.
+- Les questions calendrier ont le type "calendar_insight" et des options comme ["Oui, envoyer", "Non merci", "Rappeler plus tard"].`,
     messages: [{
       role: 'user',
       content: [
-        'Voici les emails du jour et la config actuelle.',
+        'Voici les emails du jour, la config actuelle et l\'agenda de la semaine.',
         '',
         'EMAILS DU JOUR :',
         emailSummary,
         '',
         `EXPÉDITEURS PRIORITAIRES ACTUELS : ${currentSenders}`,
         `CONTEXTE UTILISATEUR : ${(config.context || '').slice(0, 500)}`,
+        calendarBlock,
+        meetingContacts,
         '',
-        'Génère UNE question pour calibrer le tri, OU retourne null si rien n\'est ambigu. Exemples de bonnes questions :',
-        '- "[Nom] vous a écrit 3 fois ce mois-ci. Classé Important. Est-ce trop haut?" (type: sender_priority, biais vers déclassement)',
-        '- "Nouvel expéditeur [Nom] de [entreprise] mentionne 45K$. Comment le classer?" (type: sender_priority, cas ambigu)',
-        '- "Quel projet est le plus critique cette semaine?" (type: context, question ouverte)',
+        'Génère UNE question pour calibrer le tri OU une observation calendrier/email, OU retourne null si rien n\'est pertinent.',
         '',
-        'Réponds en JSON : { "question": "...", "type": "sender_priority|keyword|context", "sender_email": "si applicable", "sender_name": "si applicable", "options": ["Bien classé", "Trop haut, déclasser", "Trop bas, remonter"] }',
+        'Exemples de bonnes questions :',
+        '- "[Nom] vous a écrit 3 fois ce mois-ci. Classé Important. Est-ce trop haut?" (type: sender_priority)',
+        '- "Nouvel expéditeur [Nom] de [entreprise] mentionne 45K$. Comment le classer?" (type: sender_priority)',
+        '- "Quel projet est le plus critique cette semaine?" (type: context)',
+        '- "Vous avez un meeting avec [Nom] demain mais aucun échange email récent. Voulez-vous préparer un message ?" (type: calendar_insight)',
+        '- "3 réunions consécutives demain matin. Voulez-vous bloquer 30 minutes entre chaque ?" (type: calendar_insight)',
+        '- "Aucun événement prévu cette semaine avec [contact fréquent]. Normal ?" (type: calendar_insight)',
+        '',
+        'Réponds en JSON : { "question": "...", "type": "sender_priority|keyword|context|calendar_insight", "sender_email": "si applicable", "sender_name": "si applicable", "options": [...] }',
         'Ou retourne : null',
       ].join('\n'),
     }],
@@ -454,6 +489,7 @@ export async function analyzeEmails(emails, config, calendarContext) {
 
   if (calendarContext) {
     systemPrompt += '\n\n' + calendarContext;
+    systemPrompt += '\n\nRÈGLE CALENDRIER : Si un email mentionne une date, un rendez-vous ou une rencontre, vérifie dans l\'agenda ci-dessus s\'il y a déjà un événement correspondant. Si oui, mentionne-le dans le résumé (ex: "Un événement est déjà prévu le..."). Si non, suggère d\'en créer un dans suggested_action (ex: "Proposer un créneau et bloquer dans le calendrier").';
   }
 
   const userMessage = buildUserMessage(emails);

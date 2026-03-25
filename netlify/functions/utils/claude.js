@@ -139,7 +139,11 @@ function buildDraftSystemPrompt(config, userEmail, calendarContext) {
 
   parts.push(
     '',
-    'Réponds UNIQUEMENT en JSON valide : { "subject": "Re: ...", "body": "...", "tone": "formel|cordial|direct" }'
+    'ÉVÉNEMENT CALENDRIER :',
+    '- Si ta réponse propose ou confirme un rendez-vous, une rencontre ou un appel avec une date/heure précise, ajoute un champ "suggested_event" au JSON.',
+    '- Si la réponse ne concerne pas un rendez-vous, mets "suggested_event": null.',
+    '',
+    'Réponds UNIQUEMENT en JSON valide : { "subject": "Re: ...", "body": "...", "tone": "formel|cordial|direct", "suggested_event": { "summary": "Titre du rendez-vous", "start": "2026-03-26T14:00:00", "end": "2026-03-26T15:00:00", "attendees": ["email@example.com"] } | null }'
   );
 
   return parts.join('\n');

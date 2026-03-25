@@ -83,7 +83,7 @@ function formatRelativeDate(date) {
   return d.toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' });
 }
 
-function DraftPanel({ draft, emailId, onUpdate, onSend, onDismiss, onGenerate, onRefine }) {
+function DraftPanel({ draft, emailId, onUpdate, onSend, onDismiss, onGenerate, onRefine, onCreateEvent }) {
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(draft.body || '');
   const [confirmSend, setConfirmSend] = useState(false);
@@ -103,15 +103,57 @@ function DraftPanel({ draft, emailId, onUpdate, onSend, onDismiss, onGenerate, o
 
   if (draft.status === 'sent') {
     return (
-      <div className="mt-4 p-5 bg-emerald-50 rounded-2xl border border-emerald-200">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
-            <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+      <div className="mt-4 space-y-3">
+        <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-200">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <span className="text-sm font-semibold text-emerald-700">Message envoyé</span>
           </div>
-          <span className="text-sm font-semibold text-emerald-700">Message envoyé</span>
         </div>
+        {draft.suggestedEvent && !draft.eventCreated && (
+          <button
+            onClick={() => onCreateEvent(emailId, draft.suggestedEvent)}
+            disabled={draft.eventCreating}
+            className="w-full px-5 py-3 text-sm bg-[#f5f0e8] text-[#5c4a3a] border border-[#e0d5c5] rounded-2xl font-semibold hover:bg-[#ede5d8] transition-colors min-h-[44px] flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {draft.eventCreating ? 'Création...' : 'Bloquer le créneau'}
+          </button>
+        )}
+        {draft.eventCreated && draft.createdEvent && (
+          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-sm font-semibold text-emerald-700">Événement créé</span>
+            </div>
+            {draft.createdEvent.htmlLink && (
+              <a
+                href={draft.createdEvent.htmlLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium underline underline-offset-2"
+              >
+                Voir dans Google Calendar
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            )}
+          </div>
+        )}
+        {draft.eventError && (
+          <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-sm text-red-700">
+            {draft.eventError}
+          </div>
+        )}
       </div>
     );
   }
@@ -385,7 +427,7 @@ function ThreadMessage({ msg, defaultOpen, account }) {
   );
 }
 
-function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, onDismissEmail, onRefine, showReplyButton, account }) {
+function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, onDismissEmail, onRefine, onCreateEvent, showReplyButton, account }) {
   const [expanded, setExpanded] = useState(false);
   const [thread, setThread] = useState(null);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -630,6 +672,7 @@ function EmailCard({ analysis, draft, onGenerate, onUpdate, onSend, onDismiss, o
               onDismiss={onDismiss}
               onGenerate={onGenerate}
               onRefine={onRefine}
+              onCreateEvent={onCreateEvent}
             />
           )}
         </div>
@@ -681,6 +724,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
     updateDraft: onUpdate,
     refineDraft: onRefine,
     sendDraft: onSend,
+    createEvent: onCreateEvent,
     dismissDraft: onDismiss,
     dismissEmail: onDismissEmail,
   } = useBriefing(account);
@@ -961,6 +1005,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
                 onDismiss={onDismiss}
                 onDismissEmail={onDismissEmail}
                 onRefine={onRefine}
+                onCreateEvent={onCreateEvent}
                 showReplyButton={true}
               />
             ))}
@@ -979,6 +1024,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
                 onDismiss={onDismiss}
                 onDismissEmail={onDismissEmail}
                 onRefine={onRefine}
+                onCreateEvent={onCreateEvent}
                 showReplyButton={true}
               />
             ))}
@@ -997,6 +1043,7 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
                 onDismiss={onDismiss}
                 onDismissEmail={onDismissEmail}
                 onRefine={onRefine}
+                onCreateEvent={onCreateEvent}
                 showReplyButton={false}
               />
             ))}

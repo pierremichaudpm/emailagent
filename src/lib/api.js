@@ -137,6 +137,13 @@ export function getFreeBusy(email, provider = 'gmail', days = 5, duration = 60) 
   return request(`/calendar-freebusy?${params}`);
 }
 
+export function createCalendarEvent(userId, provider = 'gmail', { summary, start, end, description, attendees } = {}) {
+  return request('/calendar-create', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, provider, summary, start, end, description, attendees }),
+  });
+}
+
 export function updateDraft(userId, draftId, provider = 'gmail', { emailId, body, subject, to, threadId, inReplyTo, references }) {
   return request('/draft-update', {
     method: 'POST',

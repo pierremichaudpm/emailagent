@@ -138,16 +138,20 @@ export default async (req) => {
       .eq('email_id', email_id)
       .eq('provider', providerName);
 
-    return new Response(
-      JSON.stringify({
-        draftId,
-        subject: draft.subject,
-        body: draft.body,
-        tone: draft.tone,
-        to: replyTo,
-      }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    const responseData = {
+      draftId,
+      subject: draft.subject,
+      body: draft.body,
+      tone: draft.tone,
+      to: replyTo,
+    };
+    if (draft.suggested_event) {
+      responseData.suggested_event = draft.suggested_event;
+    }
+
+    return new Response(JSON.stringify(responseData), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('draft-generate error:', error);
     return new Response(JSON.stringify({ error: error.message }), {

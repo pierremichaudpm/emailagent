@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { analyzeEmails, generateDraft, sendDraft, updateDraft, dismissEmail, refineDraft, answerDailyQuestion } from '../lib/api';
+import { analyzeEmails, generateDraft, sendDraft, updateDraft, dismissEmail, refineDraft, answerDailyQuestion, createCalendarEvent } from '../lib/api';
 
 export function useBriefing(account) {
   const [analyses, setAnalyses] = useState([]);
@@ -87,6 +87,7 @@ export function useBriefing(account) {
           subject: data.subject,
           tone: data.tone,
           to: data.to,
+          suggestedEvent: data.suggested_event || null,
         });
       } catch (err) {
         setDraftState(emailId, { status: 'error', error: err.message });
@@ -167,6 +168,25 @@ export function useBriefing(account) {
     [account, drafts]
   );
 
+  const handleCreateEvent = useCallback(
+    async (emailId, eventData) => {
+      if (!account) return;
+      setDraftState(emailId, { eventCreating: true });
+      try {
+        const data = await createCalendarEvent(account.email, account.provider, eventData);
+        setDraftState(emailId, {
+          eventCreating: false,
+          eventCreated: true,
+          createdEvent: data.event,
+          suggestedEvent: null,
+        });
+      } catch (err) {
+        setDraftState(emailId, { eventCreating: false, eventError: err.message });
+      }
+    },
+    [account]
+  );
+
   const handleDismissDraft = useCallback((emailId) => {
     setDraftState(emailId, { status: 'idle' });
   }, []);
@@ -197,6 +217,7 @@ export function useBriefing(account) {
     updateDraft: handleUpdateDraft,
     refineDraft: handleRefineDraft,
     sendDraft: handleSendDraft,
+    createEvent: handleCreateEvent,
     dismissDraft: handleDismissDraft,
     dismissEmail: handleDismissEmail,
   };

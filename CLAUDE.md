@@ -31,6 +31,7 @@ email-agent/
 │   ├── draft-generate.js      # POST — génère brouillon réponse via Claude + crée dans Gmail Drafts
 │   ├── draft-send.js          # POST — envoie un brouillon Gmail
 │   ├── draft-update.js        # POST — modifie un brouillon (supprime + recrée)
+│   ├── calendar-create.js     # POST — crée un événement Google Calendar
 │   ├── profile-generate.js    # GET/POST — lance et poll la génération de profil auto
 │   ├── profile-generate-background.js # Background function — fetch 2000 emails + analyse + profil
 │   ├── providers/
@@ -123,7 +124,7 @@ App.jsx (state: view)
 ### Sécurité — non négociable
 
 - OAuth 2.0 uniquement, jamais de mots de passe email
-- Scopes Gmail : `gmail.readonly` + `gmail.send` + `gmail.compose`
+- Scopes Gmail : `gmail.readonly` + `gmail.send` + `gmail.compose` + `calendar.readonly` + `calendar.events`
 - Tokens chiffrés AES-256-GCM dans Supabase (`TOKEN_ENCRYPTION_KEY` = 64 hex chars)
 - Format chiffré : `iv:authTag:ciphertext` (tout en hex)
 - Zéro rétention du corps des courriels — on stocke résumés et métadonnées seulement

@@ -58,6 +58,27 @@ export async function listEvents(accessToken, { timeMin, timeMax, calendarId = '
     .map(normalizeEvent);
 }
 
+export async function createEvent(accessToken, { summary, start, end, description, attendees, calendarId = 'primary' }) {
+  const timeZone = 'America/Montreal';
+  const body = {
+    summary,
+    start: { dateTime: start, timeZone },
+    end: { dateTime: end, timeZone },
+  };
+  if (description) body.description = description;
+  if (attendees && attendees.length > 0) {
+    body.attendees = attendees.map((email) => ({ email }));
+  }
+
+  const data = await calendarFetch(accessToken, `/calendars/${encodeURIComponent(calendarId)}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  return normalizeEvent(data);
+}
+
 export async function getFreeBusy(accessToken, { timeMin, timeMax, timeZone = 'America/Montreal' } = {}) {
   const data = await calendarFetch(accessToken, '/freeBusy', {
     method: 'POST',

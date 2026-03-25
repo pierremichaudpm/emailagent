@@ -31,16 +31,21 @@ email-agent/
 │   ├── draft-generate.js      # POST — génère brouillon réponse via Claude + crée dans Gmail Drafts
 │   ├── draft-send.js          # POST — envoie un brouillon Gmail
 │   ├── draft-update.js        # POST — modifie un brouillon (supprime + recrée)
+│   ├── calendar-events.js     # GET — lire événements Google Calendar (7 jours)
 │   ├── calendar-create.js     # POST — crée un événement Google Calendar
+│   ├── calendar-freebusy.js   # GET — créneaux libres (heures ouvrables)
+│   ├── daily-question.js      # GET — question d'amélioration continue (cross-ref emails + calendrier)
 │   ├── profile-generate.js    # GET/POST — lance et poll la génération de profil auto
 │   ├── profile-generate-background.js # Background function — fetch 2000 emails + analyse + profil
 │   ├── providers/
 │   │   ├── base.js            # Interface abstraite EmailProvider
 │   │   ├── gmail.js           # Gmail API (fetch, getThread, createDraft, sendDraft, deleteDraft)
 │   │   └── index.js           # Factory: getProvider('gmail')
+│   ├── services/
+│   │   └── google-calendar.js # Google Calendar API (listEvents, createEvent, getFreeBusy)
 │   └── utils/
 │       ├── auth.js             # getAccessToken() — refresh transparent + Supabase update
-│       ├── claude.js           # Prompt builder + analyse + brouillons + profil auto
+│       ├── claude.js           # Prompt builder + analyse + brouillons + profil auto + calendrier
 │       ├── prioritize.js       # Scoring de priorité (IA + config user)
 │       ├── supabase.js        # Client singleton (service role)
 │       └── tokens.js          # AES-256-GCM encrypt/decrypt
@@ -50,8 +55,9 @@ email-agent/
 │   ├── index.css              # @import "tailwindcss"
 │   ├── components/
 │   │   ├── AuthButton.jsx     # Bouton connexion Gmail
-│   │   ├── Briefing.jsx       # Vue principale : briefing matin + brouillons + envoi
-│   │   ├── ConfigPanel.jsx    # Édition config post-onboarding (onglets)
+│   │   ├── Briefing.jsx       # Vue principale : briefing matin + brouillons + envoi + calendrier
+│   │   ├── CalendarWidget.jsx # Widget calendrier (timeline du jour, création rapide)
+│   │   ├── ConfigPanel.jsx    # Édition contexte professionnel
 │   │   ├── ConfigSteps.jsx    # Composants formulaire partagés + bouton profil auto
 │   │   ├── Dashboard.jsx      # Dashboard legacy (stats, vue brute)
 │   │   ├── DecisionTracker.jsx # Suivi des décisions en attente / résolues
@@ -59,7 +65,8 @@ email-agent/
 │   ├── hooks/
 │   │   ├── useAccount.js      # État auth (localStorage)
 │   │   ├── useAnalyses.js     # Fetch analyses IA + état
-│   │   ├── useBriefing.js     # Briefing complet : analyse + brouillons + envoi
+│   │   ├── useBriefing.js     # Briefing complet : analyse + brouillons + envoi + calendrier
+│   │   ├── useCalendar.js     # Fetch événements Google Calendar + groupement par jour
 │   │   ├── useConfig.js       # Charger/sauvegarder user_configs
 │   │   ├── useDecisions.js    # Fetch décisions + vérification réponses
 │   │   └── useEmails.js       # Fetch emails + loading/error
@@ -109,12 +116,15 @@ App.jsx (state: view)
   ├── login screen (si pas de compte)
   ├── Onboarding wizard (si pas de config)
   ├── Briefing (vue par défaut)
-  │   ├── Question du jour (amélioration continue)
+  │   ├── Agenda du jour (CalendarWidget — timeline + création rapide)
+  │   ├── Question du jour (amélioration continue, cross-ref emails + calendrier)
+  │   ├── + Contexte (notes dictées par voix, Web Speech API)
   │   ├── 3 sections : Urgences / À traiter / Information
   │   ├── Thread complet (collapsible) + brouillons IA + envoi
   │   ├── Rédaction collaborative (ajuster le brouillon par instruction)
-  │   ├── Notes contextuelles sur chaque message
-  │   ├── icône engrenage → ConfigPanel
+  │   ├── Notes contextuelles sur chaque message (détection date → création événement)
+  │   ├── "Bloquer le créneau" après envoi si rendez-vous proposé
+  │   ├── icône engrenage → ConfigPanel (contexte uniquement)
   │   └── icône clipboard → DecisionTracker
   ├── Dashboard (vue legacy, stats)
   ├── ConfigPanel (édition config en 4 onglets + profil auto)
@@ -178,8 +188,9 @@ TOKEN_ENCRYPTION_KEY=    # 64 hex chars: node -e "console.log(require('crypto').
 | 10 | Audit complet + fix bloquants Phase A (OAuth, erreurs, timestamps) | **Fait** |
 | 10.5 | Fix logique d'affaire Phase B (persistance, scoring, heuristiques) | **Fait** |
 | 11 | PWA + nouvel onboarding + ConfigPanel simplifié + voice input + RLS Supabase | **Fait** |
-| 12 | Test end-to-end complet (PWA install, voice, onboarding, envoi, mobile) | À faire |
-| 13 | Test interne JAXA + pilote Groupe Tonic | À faire |
+| 12 | Intégration Google Calendar (4 phases : lecture, contexte IA, actions, intelligence) | **Fait** |
+| 13 | Test end-to-end complet (calendrier, PWA, voice, onboarding, envoi, mobile) | À faire |
+| 14 | Test interne JAXA + pilote Groupe Tonic | À faire |
 
 ## Contexte global
 Voir ~/Documents/CONTEXT.md pour le profil complet,

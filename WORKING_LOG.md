@@ -756,3 +756,70 @@ Audit exhaustif couvrant : ouverture app, génération brouillon, modification, 
 - **Voice input** opérationnel sur mobile (Web Speech API)
 - **Reste à tester** : PWA install sur Android/iOS, voice input en conditions réelles, onboarding complet de bout en bout
 - **Prochaines étapes** : test interne JAXA complet, puis pilote Groupe Tonic
+
+---
+
+## 2026-03-25 — Session 10 : Intégration Google Calendar (4 phases)
+
+### Accompli
+
+**Phase A — Lecture calendrier (complet)**
+
+1. `services/google-calendar.js` — wrapper Calendar API (fetch natif) : `listEvents()`, `getFreeBusy()`, `normalizeEvent()`
+2. `calendar-events.js` — Netlify Function GET : événements sur 7 jours, timezone America/Montreal
+3. `CalendarWidget.jsx` — timeline compacte dans le briefing (beige vintage, mobile-first, collapsible par jour)
+4. `useCalendar.js` — hook React avec groupement par jour et refresh
+5. Scope `calendar.readonly` ajouté dans `gmail.js`
+
+**Phase B — Contexte IA enrichi (complet)**
+
+1. `buildCalendarContext(events)` dans `claude.js` — formate l'agenda en texte lisible pour Claude (jours français, heures 24h, événements all-day)
+2. `emails-analyze.js` — fetch événements en parallèle avec les emails, passe le contexte calendrier à Claude pour chaque batch d'analyse
+3. `draft-generate.js` — fetch événements, passe le contexte à `generateDraftReply()` pour que Claude propose des créneaux libres concrets
+4. `calendar-freebusy.js` — Netlify Function GET : créneaux libres par jour ouvrable (9h-17h)
+5. Prompts Claude enrichis : règles pour proposer des créneaux, ne pas proposer les heures occupées, format clair
+
+**Phase C — Actions calendrier (complet)**
+
+1. `createEvent()` ajouté dans `google-calendar.js`
+2. `calendar-create.js` — Netlify Function POST : créer un événement
+3. Scope `calendar.events` ajouté
+4. Prompt brouillon mis à jour : Claude retourne `suggested_event` quand un rendez-vous est proposé
+5. Bouton "Bloquer le créneau" dans le UI après envoi d'un brouillon avec rendez-vous
+6. `createCalendarEvent()` dans `api.js` et `useBriefing.js`
+
+**Phase D — Intelligence avancée (complet)**
+
+1. `generateDailyQuestion()` enrichi avec calendrier : cross-référence des participants de meetings avec les expéditeurs d'emails
+2. `daily-question.js` — nouvelle Netlify Function qui fetch calendrier + analyses pour générer la question du jour
+3. Prompt d'analyse enrichi : Claude vérifie si les dates mentionnées dans les emails correspondent à des événements existants
+4. Détection de dates dans les notes contextuelles (regex français : jours, "demain", "le 25", etc.) → suggestion "Créer un rappel ?"
+5. CalendarWidget : bouton "+" pour création rapide d'événement (formulaire inline)
+
+### Décisions techniques (Session 10)
+
+| Décision | Pourquoi |
+|----------|----------|
+| Calendrier = service, pas provider | L'interface est différente d'un EmailProvider — pas de fetchEmails, getThread, etc. |
+| Fetch calendrier en parallèle avec les emails | Pas de latence ajoutée au pipeline d'analyse (~200ms pour Calendar API) |
+| Calendar context optionnel partout | Si le fetch échoue, l'analyse et les brouillons fonctionnent quand même |
+| Timezone hardcodé America/Montreal | Tous les clients sont québécois — à rendre configurable si expansion |
+| suggested_event dans le JSON Claude | Permet au frontend d'offrir "Bloquer le créneau" sans parsing du texte |
+| Date detection par regex français | Simple et efficace pour les patterns courants (lundi, demain, le 25) |
+
+### Audit de code
+
+Audit complet des 4 phases :
+- ✅ ESM partout, pas de `require()`
+- ✅ Signatures de fonctions cohérentes, paramètres optionnels rétrocompatibles
+- ✅ Patterns Netlify Functions v2 respectés
+- ✅ Props CalendarWidget correctement passés depuis Briefing.jsx
+- ✅ Erreurs gérées gracieusement partout (calendrier qui échoue ne casse rien)
+- ✅ Build passe
+
+### Contexte pour reprise
+
+- **Calendrier intégré** : lecture + contexte IA + création d'événements + intelligence avancée
+- **Re-consent OAuth nécessaire** : scopes `calendar.readonly` + `calendar.events` ajoutés
+- **4 nouvelles Netlify Functions** : calendar-events, calendar-create, calendar-freebusy, daily-question
+- **Prochaine étape** : tester le flow complet (re-consent → calendrier dans briefing → brouillon avec créneaux → création événement)

@@ -671,3 +671,88 @@ Audit exhaustif couvrant : ouverture app, génération brouillon, modification, 
 - **Le produit est fonctionnel** : briefing, analyse, brouillons, envoi, profil auto, thread complet
 - **Reste à tester** : rédaction collaborative, question du jour, notes contextuelles (codés mais pas testés en vrai)
 - **Reste à faire** : test mobile complet, test end-to-end envoi depuis prod
+
+---
+
+## 2026-03-25 — Session 9 : PWA, onboarding, sécurité, voice input
+
+### Accompli
+
+**PWA (Progressive Web App)**
+
+1. `manifest.json` avec icônes 192x192 et 512x512 (enveloppe + sparkle IA, palette brun/beige)
+2. Service worker pour installation sur Android/iOS
+3. App installable comme application native sur téléphone
+
+**Nouvel onboarding simplifié**
+
+1. Écran 1 : "Votre assistant email" — explication visuelle du fonctionnement (3 features clés)
+2. Écran 2 : "On apprend à vous connaître" — scan de 2000 emails + barre de progression réelle
+3. Écran 3 : "C'est prêt" → premier briefing
+4. Plus de formulaire technique (expéditeurs, mots-clés, seuils) — l'IA déduit tout du contexte
+
+**ConfigPanel simplifié**
+
+1. Suppression des onglets Expéditeurs, Mots-clés, Seuils — devenus caducs avec le profil auto-généré
+2. L'engrenage ouvre directement le contexte (profil + textarea éditable + bouton profil auto)
+
+**Voice input (Web Speech Recognition)**
+
+1. Bouton micro sur "+ Contexte" en haut du briefing (notes de la semaine)
+2. Bouton micro sur "+ Contexte" dans chaque email card (notes spécifiques)
+3. Mode `continuous: true` pour dictée longue sans coupure
+4. Natif au navigateur, zéro dépendance externe, zéro coût
+
+**Question du jour améliorée**
+
+1. Biais inversé : au lieu de "est-ce que X devrait être prioritaire?" (tout le monde dit oui), on demande "est-ce que X est classé trop haut?" (l'utilisateur réfléchit à déclasser)
+2. Questions réservées aux cas vraiment ambigus (nouvel expéditeur + montant élevé)
+3. L'agent prend la décision par défaut, l'utilisateur corrige si nécessaire
+
+**Bouton "+ Contexte" comme CTA**
+
+1. Bouton visible et proéminent en haut du briefing
+2. Présent aussi dans chaque email card
+3. Avec micro pour dicter au lieu de taper
+
+**Sécurité — RLS Supabase**
+
+1. Row Level Security activé sur les 4 tables (accounts, user_configs, email_metadata, decisions)
+2. Clé anon ne peut plus rien lire/écrire
+3. Seul service_role (utilisé par les Netlify Functions) a accès complet
+
+**Déploiement**
+
+1. Plan Netlify Personal ($9/mois) activé — background functions supportées
+2. Dernier push sur GitHub → auto-deploy sur `https://jaxamail.netlify.app`
+3. Migration `user_configs INSERT` pour créer les configs manquantes
+
+### Décisions techniques (Session 9)
+
+| Décision | Pourquoi |
+|----------|----------|
+| PWA au lieu d'app native | Zéro coût App Store, installation directe depuis le navigateur, même codebase |
+| Onboarding sans formulaire | Le DG ne configure rien — l'IA scanne ses emails et comprend son contexte |
+| ConfigPanel = contexte seulement | Les onglets techniques (expéditeurs, mots-clés, seuils) sont redondants avec le profil auto |
+| Voice input natif (Web Speech API) | Zéro dépendance, zéro coût — le DG dicte au lieu de taper sur mobile |
+| RLS sur Supabase | Vulnérabilité critique détectée par Supabase Security Advisor |
+| Biais inversé sur la question du jour | Évite que tout le monde devienne "prioritaire" en 2 semaines |
+
+### Problèmes rencontrés
+
+| Problème | Cause | Résolution |
+|----------|-------|------------|
+| Profil auto bloque en prod | Background functions non supportées sur plan Free | Upgrade au plan Personal ($9/mois) |
+| Barre progression à 50% dès le début | Animation CSS placeholder `animate-pulse` à `width: 60%` | Connectée au vrai polling avec progression réelle |
+| Config non créée après onboarding | Bouton "Voir mon briefing" ne créait pas la config | INSERT manuel dans Supabase + fix du flow |
+| Vulnérabilités sécurité Supabase | RLS désactivé sur les 4 tables | Activé RLS + politiques service_role |
+
+### Contexte pour reprise
+
+- **App en production** : `https://jaxamail.netlify.app` — PWA installable
+- **RLS activé** sur toutes les tables Supabase
+- **Plan Netlify Personal** ($9/mois) — background functions fonctionnelles
+- **Onboarding simplifié** : scan 2000 emails → profil auto → briefing
+- **Voice input** opérationnel sur mobile (Web Speech API)
+- **Reste à tester** : PWA install sur Android/iOS, voice input en conditions réelles, onboarding complet de bout en bout
+- **Prochaines étapes** : test interne JAXA complet, puis pilote Groupe Tonic

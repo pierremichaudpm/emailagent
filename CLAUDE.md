@@ -128,6 +128,7 @@ App.jsx (state: view)
 - Format chiffré : `iv:authTag:ciphertext` (tout en hex)
 - Zéro rétention du corps des courriels — on stocke résumés et métadonnées seulement
 - API Claude commerciale — pas de data training
+- **RLS activé** sur les 4 tables Supabase — la clé anon ne peut rien lire/écrire, seul service_role a accès
 
 ### Contraintes techniques
 
@@ -175,8 +176,8 @@ TOKEN_ENCRYPTION_KEY=    # 64 hex chars: node -e "console.log(require('crypto').
 | 9 | gmail.send + brouillons IA + briefing + profil auto (2000 emails) | **Fait** |
 | 10 | Audit complet + fix bloquants Phase A (OAuth, erreurs, timestamps) | **Fait** |
 | 10.5 | Fix logique d'affaire Phase B (persistance, scoring, heuristiques) | **Fait** |
-| 11 | **Stabilisation produit** : persistance brouillons, state navigation, filtrage dismissed/replied | **À faire** |
-| 12 | Test end-to-end complet (re-consent OAuth, envoi réel, mobile) | À faire |
+| 11 | PWA + nouvel onboarding + ConfigPanel simplifié + voice input + RLS Supabase | **Fait** |
+| 12 | Test end-to-end complet (PWA install, voice, onboarding, envoi, mobile) | À faire |
 | 13 | Test interne JAXA + pilote Groupe Tonic | À faire |
 
 ## Contexte global

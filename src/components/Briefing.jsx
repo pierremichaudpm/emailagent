@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBriefing } from '../hooks/useBriefing';
+import { useCalendar } from '../hooks/useCalendar';
+import CalendarWidget from './CalendarWidget';
 import { getDailyQuestion, answerDailyQuestion, getEmailThread } from '../lib/api';
 
 function useVoiceInput(onResult) {
@@ -683,6 +685,8 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
     dismissEmail: onDismissEmail,
   } = useBriefing(account);
 
+  const { grouped: calendarGrouped, loading: calendarLoading, error: calendarError } = useCalendar(account);
+
   const [dailyQ, setDailyQ] = useState(null);
   const [dailyAnswered, setDailyAnswered] = useState(false);
   const [dailyInput, setDailyInput] = useState('');
@@ -797,6 +801,9 @@ export default function Briefing({ account, onDisconnect, onOpenConfig, onOpenDe
           </div>
         )}
       </header>
+
+      {/* Calendar widget */}
+      <CalendarWidget grouped={calendarGrouped} loading={calendarLoading} error={calendarError} />
 
       {/* Daily improvement question */}
       {dailyQ && !dailyAnswered && !loading && (

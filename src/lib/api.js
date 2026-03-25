@@ -127,6 +127,11 @@ export function answerDailyQuestion(userId, type, answer, senderEmail = null, co
   });
 }
 
+export function getCalendarEvents(email, provider = 'gmail', days = 7) {
+  const params = new URLSearchParams({ email, provider, days: String(days) });
+  return request(`/calendar-events?${params}`);
+}
+
 export function updateDraft(userId, draftId, provider = 'gmail', { emailId, body, subject, to, threadId, inReplyTo, references }) {
   return request('/draft-update', {
     method: 'POST',

@@ -132,6 +132,11 @@ export function getCalendarEvents(email, provider = 'gmail', days = 7) {
   return request(`/calendar-events?${params}`);
 }
 
+export function getFreeBusy(email, provider = 'gmail', days = 5, duration = 60) {
+  const params = new URLSearchParams({ email, provider, days: String(days), duration: String(duration) });
+  return request(`/calendar-freebusy?${params}`);
+}
+
 export function updateDraft(userId, draftId, provider = 'gmail', { emailId, body, subject, to, threadId, inReplyTo, references }) {
   return request('/draft-update', {
     method: 'POST',

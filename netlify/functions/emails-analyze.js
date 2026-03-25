@@ -1,8 +1,9 @@
 import { getProvider } from './providers/index.js';
 import { getSupabase } from './utils/supabase.js';
 import { getAccessToken } from './utils/auth.js';
-import { analyzeEmails } from './utils/claude.js';
+import { analyzeEmails, buildCalendarContext } from './utils/claude.js';
 import { computePriority } from './utils/prioritize.js';
+import { listEvents } from './services/google-calendar.js';
 
 const BATCH_SIZE = 5;
 
@@ -48,13 +49,24 @@ export default async (req) => {
     const account = accountResult.data;
     const config = configResult.data || {};
 
-    // 2. Récupérer les emails via le provider
+    // 2. Récupérer les emails et les événements calendrier en parallèle
     const accessToken = await getAccessToken(account);
     const provider = getProvider(providerName);
-    const emails = await provider.fetchEmails(accessToken, {
-      maxResults,
-      query: 'in:inbox',
-    });
+
+    const now = new Date();
+    const timeMin = now.toISOString();
+    const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [emails, calendarEvents] = await Promise.all([
+      provider.fetchEmails(accessToken, { maxResults, query: 'in:inbox' }),
+      listEvents(accessToken, { timeMin, timeMax, timeZone: 'America/Montreal' })
+        .catch((err) => {
+          console.warn('Calendar fetch failed (continuing without):', err.message);
+          return [];
+        }),
+    ]);
+
+    const calendarContext = buildCalendarContext(calendarEvents);
 
     if (!emails.length) {
       return new Response(JSON.stringify({ analyses: [], count: 0 }), {
@@ -130,7 +142,7 @@ export default async (req) => {
     }
 
     const batchResults = await Promise.all(
-      batches.map((batch) => analyzeEmails(batch, config))
+      batches.map((batch) => analyzeEmails(batch, config, calendarContext))
     );
 
     // 5. Combiner avec le scoring de priorité

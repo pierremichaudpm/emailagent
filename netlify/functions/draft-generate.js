@@ -1,7 +1,8 @@
 import { getProvider } from './providers/index.js';
 import { getSupabase } from './utils/supabase.js';
 import { getAccessToken } from './utils/auth.js';
-import { generateDraftReply } from './utils/claude.js';
+import { generateDraftReply, buildCalendarContext } from './utils/claude.js';
+import { listEvents } from './services/google-calendar.js';
 
 export default async (req) => {
   try {
@@ -56,9 +57,21 @@ export default async (req) => {
     const config = configResult.data || {};
     const analysis = analysisResult.data || null;
 
-    // Récupérer le fil complet via le provider
+    // Récupérer le token et les événements calendrier
     const accessToken = await getAccessToken(account);
     const provider = getProvider(providerName);
+
+    // Fetch calendar events (graceful failure)
+    let calendarContext = '';
+    try {
+      const now = new Date();
+      const timeMin = now.toISOString();
+      const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const calendarEvents = await listEvents(accessToken, { timeMin, timeMax, timeZone: 'America/Montreal' });
+      calendarContext = buildCalendarContext(calendarEvents);
+    } catch (err) {
+      console.warn('Calendar fetch failed (continuing without):', err.message);
+    }
 
     const threadId = analysis?.thread_id || email_id;
     let thread;
@@ -94,8 +107,8 @@ export default async (req) => {
       );
     }
 
-    // Générer le brouillon via Claude (envoyer tout le thread pour le contexte)
-    const draft = await generateDraftReply(messagesForReply, analysis, config, user_id);
+    // Générer le brouillon via Claude (envoyer tout le thread + calendrier pour le contexte)
+    const draft = await generateDraftReply(messagesForReply, analysis, config, user_id, calendarContext);
 
     const replyTo = lastReceived.from.email;
     // Utiliser le vrai Message-ID du header pour In-Reply-To et References

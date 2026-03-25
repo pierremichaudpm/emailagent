@@ -84,7 +84,7 @@ ${emailBlocks.join('\n\n')}`;
 /**
  * Construit le prompt pour la génération de brouillon de réponse.
  */
-function buildDraftSystemPrompt(config, userEmail) {
+function buildDraftSystemPrompt(config, userEmail, calendarContext) {
   const context = config.context || 'un professionnel';
   const userName = userEmail ? userEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '';
 
@@ -123,6 +123,21 @@ function buildDraftSystemPrompt(config, userEmail) {
     '- Si c\'est une demande d\'info, fournis une réponse structurée',
     '- NE JAMAIS inventer de faits, dates, chiffres ou engagements',
     '- Si tu manques d\'info pour répondre, indique [À COMPLÉTER] dans le brouillon',
+  );
+
+  if (calendarContext) {
+    parts.push(
+      '',
+      'CALENDRIER :',
+      '- Tu as accès au calendrier de l\'utilisateur pour la semaine à venir.',
+      '- Si l\'email demande un rendez-vous ou une disponibilité, propose des créneaux libres concrets basés sur le calendrier.',
+      '- Si un créneau est déjà pris, ne le propose pas.',
+      '- Formate les propositions : "Je serais disponible mardi 26 mars à 14h ou mercredi 27 à 10h."',
+      '- Si l\'email ne concerne pas un rendez-vous, n\'insère pas d\'information calendrier dans la réponse.',
+    );
+  }
+
+  parts.push(
     '',
     'Réponds UNIQUEMENT en JSON valide : { "subject": "Re: ...", "body": "...", "tone": "formel|cordial|direct" }'
   );
@@ -157,11 +172,19 @@ function buildDraftUserMessage(thread, analysis) {
 /**
  * Génère un brouillon de réponse via Claude.
  * Retourne { subject, body, tone }.
+ * @param {Array} thread
+ * @param {Object} analysis
+ * @param {Object} config
+ * @param {string} userEmail
+ * @param {string} [calendarContext] — bloc texte agenda (optionnel)
  */
-export async function generateDraftReply(thread, analysis, config, userEmail) {
+export async function generateDraftReply(thread, analysis, config, userEmail, calendarContext) {
   const anthropic = getClient();
-  const systemPrompt = buildDraftSystemPrompt(config, userEmail);
-  const userMessage = buildDraftUserMessage(thread, analysis);
+  const systemPrompt = buildDraftSystemPrompt(config, userEmail, calendarContext);
+  let userMessage = buildDraftUserMessage(thread, analysis);
+  if (calendarContext) {
+    userMessage += '\n\n' + calendarContext;
+  }
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -356,14 +379,79 @@ Sois précis et factuel. Ne spécule pas. Le profil doit faire 300-500 mots.`
 export { analyzeEmailPatterns };
 
 /**
+ * Construit un bloc texte résumant l'agenda de la semaine à partir d'événements calendrier.
+ * @param {Array} events — événements normalisés (depuis google-calendar.js listEvents)
+ * @returns {string} bloc texte formaté, ou chaîne vide si aucun événement
+ */
+export function buildCalendarContext(events) {
+  if (!events || !events.length) return '';
+
+  const DAYS_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  const MONTHS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+  // Group events by day (YYYY-MM-DD)
+  const byDay = new Map();
+  for (const evt of events) {
+    let dayKey;
+    if (evt.isAllDay) {
+      dayKey = evt.start.date; // "2026-03-25"
+    } else {
+      dayKey = evt.start.dateTime.slice(0, 10);
+    }
+    if (!byDay.has(dayKey)) byDay.set(dayKey, []);
+    byDay.get(dayKey).push(evt);
+  }
+
+  // Build a continuous range of days from min to max
+  const sortedDays = [...byDay.keys()].sort();
+  const startDate = new Date(sortedDays[0] + 'T00:00:00');
+  const endDate = new Date(sortedDays[sortedDays.length - 1] + 'T00:00:00');
+
+  const lines = ['--- AGENDA DE LA SEMAINE ---'];
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    const key = current.toISOString().slice(0, 10);
+    const dayName = DAYS_FR[current.getDay()];
+    const label = `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} ${current.getDate()} ${MONTHS_FR[current.getMonth()]}`;
+    const dayEvents = byDay.get(key);
+
+    if (!dayEvents || dayEvents.length === 0) {
+      lines.push(`${label} : Aucun événement`);
+    } else {
+      const parts = dayEvents.map((evt) => {
+        if (evt.isAllDay) {
+          return `Journée : ${evt.summary}`;
+        }
+        const startTime = new Date(evt.start.dateTime);
+        const endTime = new Date(evt.end.dateTime);
+        const fmt = (d) => `${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}`;
+        return `${fmt(startTime)}-${fmt(endTime)} ${evt.summary}`;
+      });
+      lines.push(`${label} : ${parts.join(', ')}`);
+    }
+    current.setDate(current.getDate() + 1);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Envoie un batch d'emails à Claude pour analyse.
  * Retourne le tableau d'analyses parsé.
+ * @param {Array} emails
+ * @param {Object} config
+ * @param {string} [calendarContext] — bloc texte agenda (optionnel)
  */
-export async function analyzeEmails(emails, config) {
+export async function analyzeEmails(emails, config, calendarContext) {
   if (!emails.length) return [];
 
   const anthropic = getClient();
-  const systemPrompt = buildSystemPrompt(config);
+  let systemPrompt = buildSystemPrompt(config);
+
+  if (calendarContext) {
+    systemPrompt += '\n\n' + calendarContext;
+  }
+
   const userMessage = buildUserMessage(emails);
 
   const response = await anthropic.messages.create({

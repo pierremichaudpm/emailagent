@@ -817,9 +817,17 @@ Audit complet des 4 phases :
 - ✅ Erreurs gérées gracieusement partout (calendrier qui échoue ne casse rien)
 - ✅ Build passe
 
+### Problèmes rencontrés
+
+| Problème | Cause | Résolution |
+|----------|-------|------------|
+| calendar-events retourne 500 après re-consent | Google Calendar API pas activée dans Google Cloud Console | Activation via console.cloud.google.com/apis/library/calendar-json.googleapis.com |
+| Re-consent OAuth ne redemande pas les scopes | Google réutilise l'ancien grant | Révoquer l'accès via myaccount.google.com/permissions puis reconnecter |
+
 ### Contexte pour reprise
 
-- **Calendrier intégré** : lecture + contexte IA + création d'événements + intelligence avancée
-- **Re-consent OAuth nécessaire** : scopes `calendar.readonly` + `calendar.events` ajoutés
-- **4 nouvelles Netlify Functions** : calendar-events, calendar-create, calendar-freebusy, daily-question
-- **Prochaine étape** : tester le flow complet (re-consent → calendrier dans briefing → brouillon avec créneaux → création événement)
+- **Calendrier intégré et testé en prod** : widget dans le briefing ✅, analyse IA enrichie, brouillons avec créneaux, création d'événements
+- **Google Calendar API activée** dans Google Cloud Console
+- **Re-consent OAuth fait** : scopes Gmail + Calendar accordés
+- **App en production** : `https://jaxamail.netlify.app` — tout fonctionnel
+- **Prochaines étapes** : usage réel par Virginie, observer la qualité des brouillons avec contexte calendrier, tester "Bloquer le créneau" après envoi
